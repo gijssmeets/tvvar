@@ -4,7 +4,7 @@ using namespace arma;
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-double check_lyapunov(const arma::mat& Phi_c, const arma::cube& Phi_f, const arma::vec& phi_r, int D = 250, int m = 100, int seed = 147) {
+double check_lyapunov(const arma::mat& Phi_c, const arma::cube& Phi_f, const arma::vec& phi_r, int seed, int D = 250, int m = 100) {
   int dim_VAR = Phi_c.n_rows;
   int lag_order = Phi_c.n_cols / dim_VAR;
   

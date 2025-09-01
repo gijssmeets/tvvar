@@ -30,8 +30,8 @@ Phi_c=Phi.c.noint
 Phi_f=Phi.f.noint
 
 
-seed=14
-result <- check_lyapunov(Phi_c, Phi_f, phi_r)
+seed=147
+check_lyapunov(Phi_c, Phi_f, phi_r, seed)
 
 
 
@@ -47,25 +47,18 @@ seed=147
 check.lyapunov <- function(Phi_c, Phi_f, phi.r, D=250, m=100, seed=147){
 
 for(k in 1:D){
-
 r = length(phi.r)
-
-
-
 phi.mat <- diag(phi.r)
 fac.cov <- diag(r)- diag(phi.r^2)
 fac.errors <- matrix(rnorm(r*m),nrow=m, ncol=r)
   
 set.seed(seed+k)
 sim.factors<- matrix(0,nrow=m, ncol=r)
+Phi.t.array <- array(0, dim=c(dim.VAR*lag.order, dim.VAR*lag.order, m))
 
 for(i in 2:m){
   sim.factors[i,] = phi.mat %*% sim.factors[(i-1),] +  sqrt(fac.cov) %*% fac.errors[i,]
 }
-
-
-
-Phi.t.array <- array(0, dim=c(dim.VAR*lag.order, dim.VAR*lag.order, m))
 
 for(j in 1:m){
   factors.j <- as.matrix(sim.factors[j,], ncol=1)
@@ -73,16 +66,13 @@ for(j in 1:m){
   Phi.t.array[(dim.VAR+1):(dim.VAR*lag.order),1:dim.VAR,j] = diag(dim.VAR)
 }
 
-
 prod.Phi.t <-Reduce("%*%", lapply(1:100, function(i) Phi.t.array[,,i]))
-
 sim.lyap[k] <- log(norm(prod.Phi.t, type = c("2")))
-
 }
 
-exp.lyap <- mean(sim.lyap)
+mean.lyap <- mean(sim.lyap)
   
-return(exp.lyap)
+return(mean.lyap)
 }
 
 
