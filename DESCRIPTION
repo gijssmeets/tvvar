@@ -1,0 +1,18 @@
+Package: examplepkg
+Type: Package
+Title: Example Package Ready for CRAN
+Version: 0.0.0.9000
+Authors@R: 
+    c(person(given = "First", family = "Last", role = c("aut", "cre"),
+             email = "you@example.com", comment = c(ORCID = "0000-0000-0000-0000")))
+Description: A tiny example package showing the minimum structure and tooling
+    to pass 'R CMD check' and prepare a CRAN submission.
+License: MIT + file LICENSE
+URL: https://github.com/yourname/examplepkg
+BugReports: https://github.com/yourname/examplepkg/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.0
+Imports:
+Suggests: testthat (>= 3.0.0), knitr, rmarkdown
+Config/testthat/edition: 3

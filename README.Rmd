@@ -1,0 +1,21 @@
+---
+output: github_document
+---
+
+# examplepkg
+
+A tiny example R package set up for CRAN submission workflow.
+
+```{r, echo=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Example
+
+```{r}
+library(examplepkg)
+hello("you")
+```
