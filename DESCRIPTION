@@ -1,18 +1,29 @@
 Package: tvvar
 Type: Package
-Title: Example Package Ready for CRAN
-Version: 0.0.0.9000
+Title: Time-Varying VAR Models
+Version: 1.0
 Authors@R: 
-    c(person(given = "First", family = "Last", role = c("aut", "cre"),
-             email = "you@example.com", comment = c(ORCID = "0000-0000-0000-0000")))
-Description: A tiny example package showing the minimum structure and tooling
-    to pass 'R CMD check' and prepare a CRAN submission.
-License: MIT + file LICENSE
-URL: https://github.com/yourname/examplepkg
-BugReports: https://github.com/yourname/examplepkg/issues
+    c(
+      person(given = "Julia", family = "Schaumburg",
+             role = c("aut", "cre"),
+             email = "j.schaumburg@vu.nl",
+             comment = c(ORCID = "0000-0003-1832-0355")),
+      person(given = "Lennart", family = "Hoogerheide",
+             role = "aut",
+             email = "l.f.hoogerheide@vu.nl",
+             comment = c(ORCID = "0000-0002-3318-1202")),
+      person(given = "Gijs", family = "Smeets",
+             role = "aut",
+             email = "gijsolinsmeets@gmail.com"))
+Description: Time Varying VAR Models (make longer description)
+License: (insert license)
+URL: https://github.com/gijssmeets/tvvar
+BugReports: https://github.com/gijssmeets/tvvar/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Imports:
+Imports: MASS, Rcpp
+LinkingTo: Rcpp, RcppArmadillo
 Suggests: testthat (>= 3.0.0), knitr, rmarkdown
 Config/testthat/edition: 3
+VignetteBuilder: knitr
