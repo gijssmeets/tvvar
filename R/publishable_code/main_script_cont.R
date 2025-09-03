@@ -8,9 +8,9 @@ library(dplyr)
 
 
 
-setwd("C:/Users/Julia/Dropbox/DynamicVAR_privat/Rpackage/publishable_code")
+setwd("C:/Users/Julia/Dropbox/tvvar/publishable_code")
 
-load("C:/Users/Julia/Dropbox/DynamicVAR_privat/Rpackage/publishable_code/model_output.RData")
+load("model_output.RData")
 
 
 ## call c++ function script
