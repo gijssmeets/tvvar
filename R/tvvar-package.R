@@ -5,4 +5,9 @@
 #' @keywords internal
 #' @useDynLib tvvar, .registration = TRUE
 #' @importFrom Rcpp evalCpp
+#' @import vars
+#' @import RcppArmadillo
+#' @import numDeriv
+#' @import matrixcalc
+#' @import dplyr
 "_PACKAGE"

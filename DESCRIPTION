@@ -22,7 +22,7 @@ BugReports: https://github.com/gijssmeets/tvvar/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Imports: MASS, Rcpp
+Imports: MASS, Rcpp, vars, numDeriv, matrixcalc, dplyr
 LinkingTo: Rcpp, RcppArmadillo
 Suggests: testthat (>= 3.0.0), knitr, rmarkdown
 Config/testthat/edition: 3
