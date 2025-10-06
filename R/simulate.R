@@ -6,10 +6,10 @@
 #' @param r Number of factors.
 #' @param A2 Scalar BEKK parameter A.
 #' @param B2 Scalar BEKK parameter B.
-#' @param pphi AR(1) coefficient for factors (scalar or matrix).
+#' @param pphi If r=1: scalar. If r>1: (rxr) matrix with pphi values on the diagonal.
 #' @param omega Covariance matrix (N x N).
 #' @param Phi.c Static VAR coefficients (N x (N*p)).
-#' @param Phi.f Factor loadings matrix (N x N).
+#' @param Phi.f Factor loadings matrix (N x (N*pr)).
 #' @param burn_in Number of burn-in steps (default 500).
 #' @return List with simulated data matrix Y (T x N), latent factors, shocks, and Phi.f structure.
 #' @export
@@ -25,10 +25,13 @@ simulate_tvvar_data <- function(T = 200, N = 2, p = 1, r = 1,
   factors <- matrix(0, nrow = T.burn, ncol = r)
   u <- matrix(0, nrow = T.burn, ncol = N)
   
+  
+  
   # innovation variance for factors
   if (r == 1) {
     eta <- 1 - pphi^2
   } else {
+    pphi <- diag(pphi)
     eta <- diag(r) - pphi %*% t(pphi)
   }
   
