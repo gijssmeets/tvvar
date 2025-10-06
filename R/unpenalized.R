@@ -1,54 +1,176 @@
-#' @keywords internal
-#' @noRd
-Q.matrix.fun <- function(r, N, p) {
-  aid.vec <- matrix(1:r, ncol = 1)
-  aid.mat <- matrix(aid.vec %x% diag(N * p + 1))
-  Qmat <- matrix(0, nrow = r * (N * p + 1)^2, ncol = r)
-  for (i in 1:r) {
-    Qmat[which(aid.mat == i), i] <- 1
+#' Unpenalized estimation (ML or EM) for TV-VAR
+#' @export
+unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
+                                 phi_f_structure,
+                                 method = c("ML","EM"),
+                                 control = list(maxit = 2000, trace = 0),
+                                 em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE)) {
+  method <- match.arg(method)
+  
+  #Y <- .ensure_TxN(as.matrix(data), fun = "unpenalized_estimate")
+  
+  
+  if (identical(method, "ML")) {
+    return(.unpen_ml(data, p, r, zero_mean, phi_f_structure, control))
+  } else {
+    return(.unpen_em(data, p, r, zero_mean, phi_f_structure, em_control))
   }
-  Qmat
 }
 
+
+
+
 #' @keywords internal
-#' @noRd
-Phi.f <- function(structure, lag.order) {
-  dim.VAR <- dim(structure)[1]
-  number.factors <- dim(structure)[3]
-  out <- array(0, c(dim.VAR, (dim.VAR * lag.order + 1), number.factors))
-  for (j in 1:number.factors) {
-    out[, , j] <- cbind(rep(0, dim.VAR),
-                        matrix(rep(structure[, , j], lag.order), nrow = dim.VAR))
+.unpen_em <- function(data, p, r, zero_mean, phi_f_structure, em_control) {
+  Y <- as.matrix(data)
+  n_var <- ncol(Y); T.fin <- nrow(Y)
+  
+  # structure → Phi.f array (N x (N*p+1) x r)
+  phi_arr <- .normalize_phi_structure(phi_f_structure, n_var, r)
+  Phi.f.array <- make.Phi.f(structure = phi_arr, lag.order = p)
+  
+  # cfg for opti.fct
+  cfg <- list(
+    dim.VAR = n_var,
+    lag.order = p,
+    number.factors = r,
+    zero.mean = isTRUE(zero_mean)
+  )
+  
+  # --- initialization (same as ML) ---
+  logit <- function(x) log(x/(1 - x))
+  A0 <- 0.10; B0 <- 0.80
+  phi_r0 <- if (r > 0) rep(0.95, r) else numeric(0L)
+  Omega0 <- diag(0.1, n_var)
+  
+  # OLS VAR for Phi_c
+  Ydep <- Y[(p + 1):T.fin, , drop = FALSE]
+  Xlag <- do.call(cbind, lapply(1:p, function(L) Y[(p + 1 - L):(T.fin - L), , drop = FALSE]))
+  X <- cbind(1, Xlag)
+  Bhat <- vapply(seq_len(n_var), function(j) lm.fit(X, Ydep[, j])$coefficients, numeric(ncol(X)))
+  Phi_c0 <- t(Bhat); if (isTRUE(zero_mean)) Phi_c0[, 1] <- 0
+  
+  # number of free Phi.f params (mask)
+  Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
+  Phi.f.mask  <- (Phi.f.as.matrix != 0)
+  n_phi_free  <- sum(Phi.f.mask)
+  
+  # packed params
+  params <- c(
+    if (length(phi_r0)) c(logit(A0), logit(B0), logit(phi_r0)) else c(logit(A0), logit(B0)),
+    rep(0.01, n_phi_free),
+    vech(Omega0),
+    as.vector(Phi_c0)
+  )
+  
+  # bounds only for (A,B,phi_r)
+  lower_bounds <- rep(-Inf, length(params)); upper_bounds <- rep( Inf, length(params))
+  n_head <- 2 + length(phi_r0)
+  if (n_head > 0) { lower_bounds[1:n_head] <- -10; upper_bounds[1:n_head] <- 10 }
+  
+  tol <- em_control$tol %||% 1e-3
+  max_iter <- em_control$max_iter %||% 200
+  do_trace <- isTRUE(em_control$trace)
+  
+  obj_prev <- Inf
+  iter <- 1L
+  repeat {
+    # --- E-step (smoother expectations kept inside opti.fct state) ---
+    invisible(opti.fct(
+      par_free   = params,
+      par_fixed  = NaN,
+      VAR.data   = Y,
+      Phi.f.array = Phi.f.array,
+      cfg = cfg,
+      Smooth = TRUE,
+      purpose = "eval"
+    ))
+    
+    # --- M-step (maximize expected complete-data loglik) ---
+    opt <- optim(
+      par = params,
+      fn  = opti.fct,
+      par_fixed  = NaN,
+      VAR.data   = Y,
+      Phi.f.array = Phi.f.array,
+      cfg = cfg,
+      Smooth = FALSE,
+      purpose = "optim",
+      method = "L-BFGS-B",
+      lower = lower_bounds,
+      upper = upper_bounds,
+      control = list(maxit = 500, trace = 0)
+    )
+    params <- opt$par
+    obj <- opt$value
+    
+    rel <- 2 * abs(obj - obj_prev) / (abs(obj) + abs(obj_prev))
+    if (do_trace) message(sprintf("[EM %03d] obj=%.6f  rel=%.3e", iter, obj, rel))
+    if (!is.finite(rel) || rel < tol || iter >= max_iter) break
+    obj_prev <- obj; iter <- iter + 1L
   }
+  
+  # final evaluation
+  ev <- opti.fct(
+    par_free   = params,
+    par_fixed  = NaN,
+    VAR.data   = Y,
+    Phi.f.array = Phi.f.array,
+    cfg = cfg,
+    Smooth = FALSE,
+    purpose = "eval"
+  )
+  
+  # ---- unpack params to estimates (mirror slicing in opti.fct) ----
+  inv_logit <- stats::plogis
+  idx <- 1L
+  A  <- inv_logit(params[idx]); idx <- idx + 1L
+  B  <- inv_logit(params[idx]); idx <- idx + 1L
+  phi_r <- if (r > 0) { x <- inv_logit(params[idx:(idx + r - 1L)]); idx <- idx + r; x } else numeric(0L)
+  
+  # ensure mask & count for unpacking Phi.f
+  Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
+  Phi.f.mask  <- (Phi.f.as.matrix != 0)
+  n_phi_free  <- sum(Phi.f.mask)
+  
+  Phi.f.est <- matrix(0, nrow = nrow(Phi.f.as.matrix), ncol = ncol(Phi.f.as.matrix))
+  if (n_phi_free > 0) {
+    Phi.f.est[Phi.f.mask] <- params[idx:(idx + n_phi_free - 1L)]
+    idx <- idx + n_phi_free
+  }
+  Phi.f.est <- array(Phi.f.est, dim = dim(Phi.f.array))
+  
+  Nstar <- n_var * (n_var + 1L) / 2L
+  L_vec <- params[idx:(idx + Nstar - 1L)]; idx <- idx + Nstar
+  Lmat  <- matrix(D.matrix(n_var) %*% L_vec, ncol = n_var)
+  Lmat[upper.tri(Lmat)] <- 0
+  Omega <- Lmat %*% t(Lmat)
+  
+  need <- if (isTRUE(zero_mean)) n_var^2 * p else (n_var^2 * p + n_var)
+  Phi_c_vec <- params[idx:(idx + need - 1L)]
+  Phi_c <- if (isTRUE(zero_mean)) cbind(0, matrix(Phi_c_vec, nrow = n_var)) else matrix(Phi_c_vec, nrow = n_var)
+  
+  # ICs
+  K <- length(c(A, B, phi_r)) + n_phi_free + Nstar + length(Phi_c_vec)
+  n_eff <- (T.fin - p) * n_var
+  AIC  <-  2 * K + 2 * ev$average.L * (T.fin - p)
+  AICc <-  AIC + (2*K^2 + 2*K) / (n_eff - K - 1)
+  BIC  <-  log(n_eff) * K + 2 * ev$average.L * (T.fin - p)
+  
+  out <- list(
+    estimate = list(A = A, B = B, phi_r = phi_r,
+                    Phi_f = Phi.f.est, Phi_c = Phi_c, Omega = Omega),
+    lik = list(avg = ev$average.L, sum = ev$full.L),
+    ic  = list(AIC = AIC, AICc = AICc, BIC = BIC),
+    eval = ev,
+    optim = list(par = params, value = obj, convergence = NA,
+                 counts = NA, message = sprintf("EM finished in %d iters", iter)),
+    meta = list(N = n_var, p = p, r = r, zero_mean = isTRUE(zero_mean),
+                nobs = T.fin, method = "EM")
+  )
+  class(out) <- "tvvar_fit"
   out
 }
-
-#' Build state-space inputs (internal)
-#' @keywords internal
-#' @noRd
-build.statespace.form <- function(VAR.data, lag.order, number.factors, Phi.f, Phi.c) {
-  dim.VAR <- ncol(VAR.data)
-  T.fin <- nrow(VAR.data)
-  Y <- t(VAR.data)
-  
-  # C++ helper builds lagged regressors
-  Y.minus1 <- create_Y_minus1(Y, lag.order, T.fin, dim.VAR)
-  
-  # drop initial lags from Y to align
-  Y <- Y[, -(1:lag.order), drop = FALSE]
-  
-  # dependent variable
-  ytilde <- Y - Phi.c %*% Y.minus1
-  
-  # selection and Z array (C++)
-  Q <- Q.matrix.fun(r = number.factors, N = dim.VAR, p = lag.order)
-  Z <- create_Z(Y.minus1, Phi.f, Q, T.fin, dim.VAR, number.factors, lag.order)
-  
-  list(Z = Z, ytilde = ytilde)
-}
-
-
-
 
 
 
@@ -62,76 +184,90 @@ build.statespace.form <- function(VAR.data, lag.order, number.factors, Phi.f, Ph
 #' @param control list for optim (e.g., list(maxit=2000, trace=0)).
 #' @return list with estimates, likelihood, ICs, eval, optim info.
 #' @export
-unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
-                                 phi_f_structure,
-                                 control = list(maxit = 2000, trace = 0)) {
-  stopifnot(is.matrix(data) || is.data.frame(data))
+#' @keywords internal
+.unpen_ml <- function(data, p, r, zero_mean, phi_f_structure, control) {
   Y <- as.matrix(data)
   n_var <- ncol(Y); T.fin <- nrow(Y)
   
-  # normalize phi_f_structure -> 3D array [N,N,r]
-  phi_arr <- .normalize_phi_structure(phi_f_structure, n_var, r)
+  # structure → Phi.f array (N x (N*p+1) x r)
+  Phi.f.str <- array(1, dim = c(n_var,n_var,r))
+  Phi.f.array <- make.Phi.f(structure = Phi.f.str, lag.order = p)
   
-  # build Phi^f array [N, N*p+1, r] and mask
-  Phi.f.array <- Phi.f(structure = phi_arr, lag.order = p)
-  Phi.f.mat  <- matrix(Phi.f.array, nrow = n_var)
-  Phi.f.mask <- matrix(Phi.f.array, nrow = n_var); Phi.f.mask[Phi.f.mask != 0] <- 1L
-  n_phi_free <- sum(Phi.f.mask != 0)
+  # cfg for opti.fct
+  cfg <- list(
+    dim.VAR = n_var,
+    lag.order = p,
+    number.factors = r,
+    zero.mean = isTRUE(zero_mean)
+  )
   
-  # quick starts: (A,B,phi_r) in (0,1), Omega small diag, Phi_c by OLS
+  # --- initialization (same as EM) ---
   logit <- function(x) log(x/(1 - x))
-  A0 <- 0.10; B0 <- 0.80; phi_r0 <- rep(0.95, r)
+  A0 <- 0.10; B0 <- 0.80
+  phi_r0 <- if (r > 0) rep(0.95, r) else numeric(0L)
   Omega0 <- diag(0.1, n_var)
   
-  # Phi_c by static VAR (fast OLS)
+  # OLS VAR for Phi_c
   Ydep <- Y[(p + 1):T.fin, , drop = FALSE]
   Xlag <- do.call(cbind, lapply(1:p, function(L) Y[(p + 1 - L):(T.fin - L), , drop = FALSE]))
   X <- cbind(1, Xlag)
   Bhat <- vapply(seq_len(n_var), function(j) lm.fit(X, Ydep[, j])$coefficients, numeric(ncol(X)))
   Phi_c0 <- t(Bhat); if (isTRUE(zero_mean)) Phi_c0[, 1] <- 0
   
-  # pack params (unconstrained)
-  params0 <- c(logit(A0), logit(B0), logit(phi_r0),
-               rep(0.01, n_phi_free),
-               vech(Omega0),
-               as.vector(Phi_c0))
+  # number of free Phi.f params (mask)
+  Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
+  Phi.f.mask  <- (Phi.f.as.matrix != 0)
+  n_phi_free  <- sum(Phi.f.mask)
+  
+  # packed params
+  par_init <- c(
+    if (length(phi_r0)) c(logit(A0), logit(B0), logit(phi_r0)) else c(logit(A0), logit(B0)),
+    rep(0.01, n_phi_free),
+    vech(Omega0),
+    as.vector(Phi_c0)
+  )
   
   # ML optimize
   opt <- optim(
-    par = params0,
-    fn  = opti_fct,
-    purpose   = "optim",
+    par = par_init,
+    fn  = opti.fct,
+    par_fixed = NaN,
     VAR.data  = Y,
-    Phi.f.mask = Phi.f.mask,
-    zero.mean  = isTRUE(zero_mean),
-    Smooth     = FALSE,
-    r = r, p = p, n_var = n_var,
+    Phi.f.array = Phi.f.array,
+    cfg = cfg,
+    Smooth = FALSE,
+    purpose = "optim",
     method = "BFGS",
-    hessian = FALSE,
     control = control
   )
   
-  # evaluate at optimum
-  ev <- opti_fct(
-    params   = opt$par,
-    VAR.data = Y,
-    Phi.f.mask = Phi.f.mask,
-    zero.mean  = isTRUE(zero_mean),
-    Smooth     = FALSE,
-    purpose = "eval",
-    r = r, p = p, n_var = n_var
+  # Evaluate
+  ev <- opti.fct(
+    par_free   = opt$par,
+    par_fixed  = NaN,
+    VAR.data   = Y,
+    Phi.f.array = Phi.f.array,
+    cfg = cfg,
+    Smooth = FALSE,
+    purpose = "eval"
   )
   
-  # transform back (mirror slicing in opti_fct)
+  # ---- unpack params to estimates (mirror slicing in opti.fct) ----
   inv_logit <- stats::plogis
   idx <- 1L
   A  <- inv_logit(opt$par[idx]); idx <- idx + 1L
   B  <- inv_logit(opt$par[idx]); idx <- idx + 1L
-  phi_r <- inv_logit(opt$par[idx:(idx + r - 1L)]); idx <- idx + r
+  phi_r <- if (r > 0) inv_logit(opt$par[idx:(idx + r - 1L)]) else numeric(0L)
+  idx <- idx + length(phi_r)
   
-  Phi.f.est <- matrix(0, nrow = nrow(Phi.f.mat), ncol = ncol(Phi.f.mat))
+  # ensure mask & count for unpacking Phi.f
+  Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
+  Phi.f.mask  <- (Phi.f.as.matrix != 0)
+  n_phi_free  <- sum(Phi.f.mask)
+  
+  Phi.f.est <- matrix(0, nrow = nrow(Phi.f.as.matrix), ncol = ncol(Phi.f.as.matrix))
   if (n_phi_free > 0) {
-    Phi.f.est[Phi.f.mask != 0] <- opt$par[idx:(idx + n_phi_free - 1L)]
+    Phi.f.est[Phi.f.mask] <- opt$par[idx:(idx + n_phi_free - 1L)]
     idx <- idx + n_phi_free
   }
   Phi.f.est <- array(Phi.f.est, dim = dim(Phi.f.array))
@@ -161,7 +297,8 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
     eval = ev,
     optim = list(par = opt$par, value = opt$value, convergence = opt$convergence,
                  counts = opt$counts, message = opt$message),
-    meta = list(N = n_var, p = p, r = r, zero_mean = isTRUE(zero_mean), nobs = T.fin, method = "ML")
+    meta = list(N = n_var, p = p, r = r, zero_mean = isTRUE(zero_mean),
+                nobs = T.fin, method = "ML")
   )
   class(out) <- "tvvar_fit"
   out
@@ -227,145 +364,272 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
 #' @export
 #' @importFrom stats plogis
 
-
-opti_fct <- function(params, VAR.data, Phi.f.mask,
-                     zero.mean = TRUE, Smooth = FALSE,
-                     purpose = c("optim", "eval"),
-                     r, p, n_var) {
+#' @keywords internal
+#' @noRd
+opti.fct <- function(par_free, par_fixed, VAR.data, Phi.f.array, cfg, Smooth, purpose){
   
-  purpose <- match.arg(purpose)
-  stopifnot(is.matrix(VAR.data), is.numeric(params), length(r) == 1, length(p) == 1, length(n_var) == 1)
+  # Unpack
+  zero.mean = cfg$zero.mean
+  dim.VAR = cfg$dim.VAR
+  lag.order = cfg$lag.order
+  number.factors = cfg$number.factors
   
-  inv_logit <- function(x) plogis(x)
   
-  ## ---- 1) unpack parameters -------------------------------------------------
-  idx <- 1L
-  A <- inv_logit(params[idx]); idx <- idx + 1L
-  B <- inv_logit(params[idx]); idx <- idx + 1L
-  
-  # phi_r (pphi) on (0,1); diagonal unless r==1 (1x1)
-  if (r > 0) {
-    phi_r <- inv_logit(params[idx:(idx + r - 1L)]); idx <- idx + r
-    pphi <- if (r == 1L) matrix(phi_r, 1, 1) else diag(phi_r, nrow = r)
-    Q <- diag(r) - pphi %*% t(pphi)
-    starta <- numeric(r); startP <- diag(r)
+  # Combine [vec] par free and [list] par fixed into [vec] params
+  if (is.numeric(par_free)) {
+    params <- par_free
   } else {
-    # r == 0: degenerate factor (keep 1x1 placeholders but we won't smooth)
-    pphi <- matrix(0, 1, 1)
-    Q <- diag(1) - pphi %*% t(pphi)
-    starta <- numeric(1); startP <- diag(1)
-  }
+    params <- rebuild_params(par_free, par_fixed)
+  }  
+  # transform back to (0,1) space
+  A <- exp(params[1])/(1+exp(params[1]))
+  B <- exp(params[2])/(1+exp(params[2]))
   
-  # Fill Phi.f from masked positions
-  Phi.f.as.mat <- matrix(Phi.f.mask, nrow = n_var)
-  k_phi <- sum(Phi.f.as.mat != 0)
-  stopifnot(idx + k_phi - 1L <= length(params))
-  Phi.f <- matrix(0, nrow = nrow(Phi.f.as.mat), ncol = ncol(Phi.f.as.mat))
-  Phi.f[Phi.f.as.mat != 0] <- params[idx:(idx + k_phi - 1L)]
-  idx <- idx + k_phi
   
-  # Omega (momega) via lower-tri param vector (N*(N+1)/2)
-  Nstar <- n_var * (n_var + 1L) / 2L
-  stopifnot(idx + Nstar - 1L <= length(params))
-  # D.matrix should map vech to lower-tri; use your Rcpp D.matrix or R equivalent
-  L_vec <- params[idx:(idx + Nstar - 1L)]; idx <- idx + Nstar
-  m1 <- matrix(D.matrix(n_var) %*% L_vec, ncol = n_var)  # D.matrix provided by C++ or R
-  m1[upper.tri(m1)] <- 0
-  momega <- m1 %*% t(m1)
-  firstH <- momega / (1 - A - B)
-  covi <- 1
-  
-  # Phi.c (deterministic part)
-  if (zero.mean) {
-    need <- n_var^2 * p
-    stopifnot(idx + need - 1L <= length(params))
-    Phi.c <- cbind(rep(0, n_var),
-                   matrix(params[idx:(idx + need - 1L)], nrow = n_var))
-    idx <- idx + need
-  } else {
-    need <- n_var^2 * p + n_var
-    stopifnot(idx + need - 1L <= length(params))
-    Phi.c <- matrix(params[idx:(idx + need - 1L)], nrow = n_var)
-    idx <- idx + need
-  }
-  
-  ## ---- 2) build state-space inputs -----------------------------------------
-  nf <- if (r == 0L) 1L else r
-  ss <- build.statespace.form(VAR.data = VAR.data, lag.order = p,
-                              number.factors = nf, Phi.f = Phi.f, Phi.c = Phi.c)
-  ytilde <- ss$ytilde
-  Z <- ss$Z
-  T.here <- ncol(ytilde) - 1L
-  
-  ## ---- 3) main filter / likelihood (C++ backend) ----------------------------
-  out <- my_loop_main(ytilde, Z, startP, covi, firstH, momega, pphi, A, B, Q)
-  
-  if (purpose == "optim") {
-    return(-out$avlik)
-  }
-  
-  ## ---- 4) (optional) RTS smoother ------------------------------------------
-  res <- list(
-    average.L = -out$avlik,
-    full.L    = -out$sumlik,
-    Phi.c     = Phi.c,
-    array.filtered.H = out$aH,
-    momega = vech(momega),   # assumes you provide vech()
-    Nstar  = Nstar
-  )
-  
-  last.obs <- ncol(out$pstate)
-  if (r > 0) {
-    pred_a <- matrix(out$pstate[, -last.obs, drop = FALSE], ncol = T.here)
-    pred_P <- out$pstatevariance[, , -last.obs, drop = FALSE]
-    filt_a <- out$fstate[, -last.obs, drop = FALSE]
-    filt_P <- out$fstatevariance[, , -last.obs, drop = FALSE]
-    L.arr  <- out$L[, , -last.obs, drop = FALSE]
-    F.arr  <- out$F[, , -last.obs, drop = FALSE]
-    v.mat  <- out$vmat[, -last.obs, drop = FALSE]
-    pred.err.var <- F.arr
+  if(number.factors>0){
     
-    res$predicted.state            <- pred_a
-    res$predicted.state.variance   <- pred_P
-    res$filtered.state             <- filt_a
-    res$filtered.state.variance    <- filt_P
-    res$Z                          <- Z
-    res$v.mat                      <- v.mat
-    res$pred.err.var               <- pred.err.var
+    # [FIX] zero mean option
+    # Unpacks (conditional) parameter 'pphi'
     
-    if (isTRUE(Smooth)) {
-      rts_r <- matrix(0, nrow = r, ncol = T.here)
-      rts_N <- array(0, dim = c(r, r, T.here))
-      alpha_hat <- matrix(0, nrow = nrow(pred_a), ncol = ncol(pred_a))
-      V_arr <- array(0, dim = c(r, r, T.here))
-      smooth_err <- matrix(0, nrow = nrow(ytilde), ncol = T.here)
-      
-      for (t in T.here:1) {
-        F_inv <- solve(F.arr[, , t])
-        L_t   <- L.arr[, , t]
-        v_t   <- v.mat[, t, drop = FALSE]
-        a_t   <- pred_a[, t, drop = FALSE]
-        P_t   <- pred_P[, , t, drop = FALSE]
-        Z_t   <- Z[, , t, drop = FALSE]
-        
-        r_tm1 <- t(Z_t) %*% F_inv %*% v_t + t(L_t) %*% rts_r[, t, drop = FALSE]
-        N_tm1 <- t(Z_t) %*% F_inv %*% Z_t + t(L_t) %*% rts_N[, , t] %*% L_t
-        
-        alpha_hat[, t] <- a_t + P_t %*% r_tm1
-        V_arr[, , t]   <- P_t - P_t %*% N_tm1 %*% P_t
-        
-        if (t > 1) {
-          rts_r[, t - 1] <- r_tm1
-          rts_N[, , t - 1] <- N_tm1
-        }
-        smooth_err[, t] <- ytilde[, t] - Z_t %*% alpha_hat[, t, drop = FALSE]
+    if(number.factors==1){
+      pphi <- matrix(tanh(params[3:(3+number.factors-1)]), nrow=1, ncol=1)} else{
+        pphi <- diag(tanh(params[3:(3+number.factors-1)]))
       }
-      
-      res$smoothed.state            <- alpha_hat
-      res$smoothed.state.variance   <- V_arr
-      res$smooth.error              <- smooth_err
-    }
+    
+    
+    # sigma_eta is I - phi * phi. 
+    Q <- diag(number.factors)-pphi %*% t(pphi)
+    
+    # a1 for the factors, is 0 as stationary
+    starta <- numeric(number.factors)
+    
+    # P1 is unconditional variance of the variance, which is Identity due to orthogonal variance of eta.
+    startP <- diag(number.factors)
+    
+  } else if (number.factors==0){
+    pphi <- matrix(0, nrow=1, ncol=1)
+    Q <- diag(1)-pphi %*% t(pphi)
+    starta <- numeric(1)
+    startP <- diag(1)
   }
   
-  res
-}
+  Phi.f.as.matrix <- matrix(Phi.f.array, nrow=dim.VAR)
+  count.params <- 2+number.factors+length(which(Phi.f.as.matrix != 0))
+  Phi.f <- matrix(0, nrow(Phi.f.as.matrix), ncol(Phi.f.as.matrix))
+  Phi.f[which(Phi.f.as.matrix != 0)]=params[(2+number.factors+1):count.params]
+
+  #length(which(Phi.f != 0))
+  #count.params <- 3+length(as.vector(Phi.f))
+  
+  ######## initializations for state, state variance and covariance matrix
+  
+  # Obtain the base covariance matrix omega
+  Nstar <- dim.VAR*(dim.VAR+1)/2
+  m1 <- matrix(D.matrix(dim.VAR) %*% params[(count.params+1):(count.params+Nstar)], ncol=dim.VAR)
+  m1[upper.tri(m1)]=0
+  momega <- m1%*%t(m1)
+  
+  # Init the covariance matrix H_t (using unconditional variance)
+  firstH <- momega/(1-A-B)
+  
+  # Flag for updating covariance (1, 2 both using the BEKK model for H_t). Can change this!
+  covi=1
+  
+  count.params = count.params+Nstar
+  
+  
+  # [FIX] zero.mean option
+  # Unpacks (conditional) parameter 'Phi.c'
+  if(zero.mean==TRUE){
+    Phi.c <- cbind(rep(0,dim.VAR),matrix(params[(count.params+1):(count.params+dim.VAR^2*lag.order)], nrow=dim.VAR))
+  } else{
+    #Phi.c <- cbind(rep(0,dim.VAR),matrix(params[(count.params+1):(count.params+dim.VAR^2*lag.order)], nrow=dim.VAR))
+    Phi.c <- matrix(params[(count.params+1):(count.params+dim.VAR^2*lag.order+dim.VAR)], nrow=dim.VAR)
+  }
+  
+  
+  # Obtain y_tilde, Z from the VAR data by building state space form.
+  if(number.factors==0){
+    data.ss <- build.statespace.form(VAR.data=VAR.data, lag.order=lag.order, number.factors=1, Phi.f = Phi.f, Phi.c=Phi.c)} else{
+      data.ss <- build.statespace.form(VAR.data=VAR.data, lag.order=lag.order, number.factors=number.factors, Phi.f = Phi.f, Phi.c=Phi.c)}
+  
+  
+  ytilde <- data.ss$ytilde
+  Z <- data.ss$Z
+  T.here <- length(ytilde[1,])-1
+  
+  
+  ### call C++ loop function for the KF
+  ### Output of the Kalman filter gives (sumlik, avlik, pstate, pstatevariance, fstate, fstatevariance, F, L, vmat, aH, T)
+  
+  output <- my_loop_main(ytilde, Z, startP, covi, firstH, momega, pphi, A, B, Q)
+  
+  last.obs <- length(output$pstate[1,])
+  
+  if(number.factors==0){} else{
+    ### Kalman smoother 
+    predicted.a <- matrix(output$pstate[,-last.obs, drop=FALSE],ncol=T.here)
+    predicted.P <- output$pstatevariance[,,-last.obs, drop=FALSE]
+    filtered.a <- output$fstate[,-last.obs, drop=FALSE]
+    filtered.P <- output$fstatevariance[,,-last.obs, drop=FALSE]
+    
+    L.array <- output$L[,,-last.obs, drop=FALSE]
+    F.array <- output$`F`[,,-last.obs, drop=FALSE]
+    v.mat <- output$vmat[,-last.obs,drop=FALSE]
+    pred.err.var <- output$`F`[,,-last.obs,drop=FALSE]
+    
+    ### more things to collect
+    r.mat <- matrix(0, nrow=number.factors,ncol=T.here)
+    N.array <- array(0, dim=c(number.factors,number.factors,T.here))
+    alphahat.mat <- matrix(0, nrow=nrow(predicted.a), ncol=ncol(predicted.a))
+    V.array <- array(0, dim=c(number.factors,number.factors,T.here))
+    smooth.error <- matrix(0, nrow=nrow(ytilde), ncol=T.here)
+    
+    # Added init of autocovariance matrix (Γ = similar(P, length(a) - 1))
+    gamma.array <- array(0, dim=c(number.factors,number.factors,T.here-1))
+  }
+  
+  if(Smooth == FALSE){} else{
+    ytilde.short = ytilde[,-last.obs, drop=FALSE]
+    
+    if(number.factors>0){
+      
+      for(t in T.here:1){
+        r.t <- r.mat[,t]
+        N.t <- N.array[,,t]
+        
+        F.t.inv <- solve(F.array[,,t])
+        L.t <- L.array[,,t]
+        v.t <- v.mat[,t]
+        a.t <- predicted.a[,t]
+        P.t <- predicted.P[,,t]
+        Z.t = Z[,,t, drop=FALSE]
+        Z.t <- matrix(Z.t, nrow = dim(Z)[1], ncol = dim(Z)[2])  # force 2D
+        
+        r.tminus1 <- t(Z.t) %*% F.t.inv %*% v.t + t(L.t) %*% r.t
+        N.tminus1 <- t(Z.t) %*% F.t.inv %*% Z.t + t(L.t) %*% N.t %*% L.t
+        
+        alphahat.mat[,t] <- a.t + P.t %*% r.tminus1
+        V.array[,,t] <- P.t - P.t %*% N.tminus1 %*% P.t
+        
+        # Extended KS recursions 
+        if (t > 1){
+          gamma.array[,, t-1] <- diag(number.factors) - P.t %*% N.tminus1}
+        if (t < T.here) {
+          J_t <- L.t %*% P.t
+          gamma.array[,, t] <- gamma.array[,, t] %*% J_t
+        }
+        
+        
+        r.mat[,(t-1)] = r.tminus1
+        N.array[,,(t-1)] = N.tminus1
+        
+        smooth.error[,t] <- ytilde.short[,t]-Z.t %*% alphahat.mat[,t]
+        
+      }
+    } else{}
+  }
+  
+  # Add penalisation
+  #
+  #penalty_phi_c <- lambda/length(Phi.c) * mean(abs(Phi.c))
+  #penalty_phi_f <- lambda/length(Phi.f) * mean(abs(Phi.f))
+  
+  if(purpose=="optim"){
+    L = -output$avlik
+  } else if(purpose=="eval"){
+    L = -output$avlik
+    
+    
+    if(number.factors==0){
+      result <- new.env()
+      result$average.L <- -output$avlik
+      result$full.L <- -output$sumlik
+      result$Phi.c <- Phi.c
+      result$array.filtered.H <- output$aH
+      result$momega =vech(momega)
+      result$Nstar =Nstar
+      as.list(result)} else{
+        
+        
+        result <- new.env()
+        result$average.L <- -output$avlik
+        result$full.L <- -output$sumlik
+        result$filtered.state <- filtered.a
+        result$filtered.state.variance <- filtered.P
+        result$predicted.state <- predicted.a
+        result$predicted.state.variance <- predicted.P
+        result$Phi.c <- Phi.c
+        result$array.filtered.H <- output$aH
+        result$momega =vech(momega)
+        result$Nstar =Nstar
+        result$Z=Z
+        result$v.mat= v.mat
+        result$pred.err.var=pred.err.var
+        result$Y.minus1 <- data.ss$Y.minus1
+        
+        if(Smooth == TRUE){
+          result$smoothed.state <- alphahat.mat
+          result$smoothed.state.variance <- V.array
+          result$smooth.error=smooth.error
+          result$ytilde <- ytilde
+          result$smoothed.state.autocov <- gamma.array
+          
+          # Initialize V* matrices
+          V_0_minus1_star <- array(0, dim=c(number.factors,number.factors))
+          V_0_star <- array(0, dim=c(number.factors,number.factors))
+          V_minus1_star <- array(0, dim=c(number.factors,number.factors))
+          
+          
+          # Fill V* matrices
+          for (t in 2:T.here){
+            V_0_minus1_star <- V_0_minus1_star + gamma.array[,,t-1] + result$smoothed.state[,t] %*% t(result$smoothed.state[,t-1])
+            V_0_star <- V_0_star + V.array[,,t] + result$smoothed.state[,t] %*% t(result$smoothed.state[,t])
+            V_minus1_star <- V_minus1_star + V.array[,,t-1] + result$smoothed.state[,t-1] %*% t(result$smoothed.state[,t-1])
+          }
+          
+          # Store V* matrices
+          result$V_0_minus1_star <- V_0_minus1_star
+          result$V_0_star <- V_0_star
+          result$V_minus1_star <- V_minus1_star
+          
+          # pphi  
+          pphi_full <- V_0_minus1_star %*% solve(V_minus1_star)
+          pphi_full <- pmin(pmax(pphi_full, -0.999), 0.999)
+          
+          
+          pphi_trans <- atanh(pphi_full)
+          if (any(is.nan(pphi_trans))) {
+            print("pphi_full:")
+            print(pphi_full)
+            print("Smoothed state:")
+            print(result$smoothed.state)
+            print("V_0_minus1_star:")
+            print(V_0_minus1_star)
+            print("V_minus1_star:")
+            print(V_minus1_star)
+            stop("NaN detected in atanh(pphi_full)")
+          }
+          
+          if (nrow(pphi_full) == 1) {
+            result$pphi_ols <- (pphi_full[1, 1])
+          } else {
+            result$pphi_ols <- (diag(pphi_full))
+          }
+          
+          # Phi.f gradient
+          grad <- matrix(0, nrow=dim.VAR, ncol=dim.VAR)
+          for (t in 1:T.here){
+            Z.t = Z[,,t, drop=FALSE]
+            Z.t <- matrix(Z.t, nrow = dim(Z)[1], ncol = dim(Z)[2]) 
+            
+            grad <- grad + (smooth.error[,t] %*% t(smooth.error[,t]) + Z.t %*% V.array[,,t] %*% t(Z.t))
+          }
+          grad.Phi.f <- -(0.5/T.here)*grad
+          result$grad.Phi.f <- grad.Phi.f
+          
+        }
+        
+        as.list(result)
+      }
+  }}
