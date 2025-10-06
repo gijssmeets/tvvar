@@ -2,7 +2,7 @@
 % Please edit documentation in R/unpenalized.R
 \name{unpenalized_estimate}
 \alias{unpenalized_estimate}
-\title{Unpenalized estimation (ML) for TV-VAR — minimal wrapper}
+\title{Unpenalized estimation (ML or EM) for TV-VAR}
 \usage{
 unpenalized_estimate(
   data,
@@ -10,25 +10,11 @@ unpenalized_estimate(
   r,
   zero_mean = TRUE,
   phi_f_structure,
-  control = list(maxit = 2000, trace = 0)
+  method = c("ML", "EM"),
+  control = list(maxit = 2000, trace = 0),
+  em_control = list(max_iter = 200, tol = 0.001, trace = TRUE)
 )
 }
-\arguments{
-\item{data}{numeric matrix (T x N), already transformed (demeaned if zero_mean=TRUE).}
-
-\item{p}{integer, VAR lag order.}
-
-\item{r}{integer, number of factors.}
-
-\item{zero_mean}{logical; TRUE fixes intercept to 0.}
-
-\item{phi_f_structure}{3D array \link{N,N,r}, or list of r (N x N) matrices, or block matrix N x (N*r).}
-
-\item{control}{list for optim (e.g., list(maxit=2000, trace=0)).}
-}
-\value{
-list with estimates, likelihood, ICs, eval, optim info.
-}
 \description{
-Unpenalized estimation (ML) for TV-VAR — minimal wrapper
+Unpenalized estimation (ML or EM) for TV-VAR
 }

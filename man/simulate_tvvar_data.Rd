@@ -31,13 +31,13 @@ simulate_tvvar_data(
 
 \item{B2}{Scalar BEKK parameter B.}
 
-\item{pphi}{AR(1) coefficient for factors (scalar or matrix).}
+\item{pphi}{If r=1: scalar. If r>1: (rxr) matrix with pphi values on the diagonal.}
 
 \item{omega}{Covariance matrix (N x N).}
 
 \item{Phi.c}{Static VAR coefficients (N x (N*p)).}
 
-\item{Phi.f}{Factor loadings matrix (N x N).}
+\item{Phi.f}{Factor loadings matrix (N x (N*pr)).}
 
 \item{burn_in}{Number of burn-in steps (default 500).}
 }
