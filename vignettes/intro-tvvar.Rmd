@@ -11,12 +11,13 @@ vignette: >
 ## Installation
 
 The package can be installed with
+
 ```{r, eval=FALSE}
 install.packages("tvvar")
 ```
 
-
 ## Background
+
 This package builds on dynamic factor VAR models with conditional heteroskedastic errors [@gorgi2019dfvar].
 
 ```{r, include = FALSE}
@@ -27,107 +28,151 @@ set.seed(1)
 
 'Quick intro to the theory'
 
-
-## Data 
+## Data
 
 Let's first run the data. We have two datasets: 2-dimensional simulated dataset to illustrate the methods, and real dataset of the US macroeconomics of 3 dimensions.
- 
+
 ```{r, eval=FALSE, echo=TRUE}
 simulate_tvvar_data(T, N, p, r, A2, B2, pphi, omega, Phi.c, Phi.f, burn_in)
 ```
-- `T`: Number of time points to keep (after burn-in).  
-- `N`: Number of observed variables in the VAR.  
-- `p`: Lag order of the VAR.  
-- `r`: Number of latent factors.  
 
-- `A2` ($\alpha^2$): Scalar BEKK parameter controlling how much recent shocks affect volatility.  
-- `B2` ($\beta^2$): Scalar BEKK parameter controlling the persistence of volatility.  
-  - Note: stationarity requires $\alpha^2 + \beta^2 < 1$.  
+-   `T`: Number of time points to keep (after burn-in).\
 
-- `pphi` ($\varphi$): Factor transition parameter(s).  
-  - If $r = 1$: a scalar with $|\varphi| < 1$.  
-  - If $r > 1$: an $r$-length vector with diagonal values of ($\varphi$).  
+-   `N`: Number of observed variables in the VAR.\
 
-- `omega` ($\Omega$): $N \times N$ positive-definite matrix in the volatility recursion.  
-- `Phi.c` ($\Phi_c$): $N \times (N \times p)$ matrix of time-invariant VAR coefficients.  
-- `Phi.f` ($\Phi_f$): Factor loading matrices (one per factor) making coefficients time-varying.  
+-   `p`: Lag order of the VAR.\
 
-- `burn_in`: Number of initial simulated steps to discard (for stabilization).  
+-   `r`: Number of latent factors.
 
+-   `A2` ($\alpha^2$): Scalar BEKK parameter controlling how much recent shocks affect volatility.\
+
+-   `B2` ($\beta^2$): Scalar BEKK parameter controlling the persistence of volatility.
+
+    -   Note: stationarity requires $\alpha^2 + \beta^2 < 1$.
+
+-   `pphi` ($\varphi$): Factor transition parameter(s).
+
+    -   If $r = 1$: a scalar with $|\varphi| < 1$.\
+    -   If $r > 1$: an $r$-length vector with diagonal values of ($\varphi$).
+
+-   `omega` ($\Omega$): $N \times N$ positive-definite matrix in the volatility recursion.\
+
+-   `Phi.c` ($\Phi_c$): $N \times (N \times p)$ matrix of time-invariant VAR coefficients.\
+
+-   `Phi.f` ($\Phi_f$): Factor loading matrices (one per factor) making coefficients time-varying.
+
+-   `burn_in`: Number of initial simulated steps to discard (for stabilization).
 
 We also have the real dataset of US macroeconomics, which can be loaded by:
+
 ```{r, eval=TRUE, echo=TRUE}
 data(macro_data)
 str(macro_data[1:5, ])   # show first few rows of the real dataset
 ```
+
 This dataset contains 5 variables: date, unemployment rate, inflation rate and federal funds rate, from 1960 to 2022 (T = 747). The data is quarterly and seasonally adjusted. The data is stored in a T x N matrix where each column corresponds to a variable.
 
-
 ## Unpenalized estimation
-We then have 3 different functions: unpenalized estimation, penalized estimation and impulse response functions. The user specifies the data as input, given as a T x N matrix. The `unpenalized_estimate()` function returns a `S3` class object ``tvvar`` which contains the estimated parameters and scores on fit of the model. The function takes the following arguments:
+
+We then have 3 different functions: unpenalized estimation, penalized estimation and impulse response functions. The user specifies the data as input, given as a T x N matrix. The `unpenalized_estimate()` function returns a `S3` class object `tvvar` which contains the estimated parameters and scores on fit of the model. The function takes the following arguments:
 
 ```{r, echo = TRUE, eval = FALSE}
 unpenalized_estimate(data, p, r, zero_mean, phi_f_structure, control)
 ```
 
-- `data`: a T × N matrix of the time series data.  
-- `p`: the lag order of the VAR model.  
-- `r`: the number of factors.  
-- `zero_mean`: a logical value indicating whether to include an intercept.  
-  Note that if `zero_mean = TRUE`, the data is assumed to be demeaned.  
-- `phi_f_structure`: a matrix specifying the structure of the factor loadings.
-- `method`: method for estimation, either "ML" for maximum likelihood or "EM" for expectation-maximization algorithm.
+-   `data`: a T × N matrix of the time series data.\
+-   `p`: the lag order of the VAR model.\
+-   `r`: the number of factors.\
+-   `zero_mean`: a logical value indicating whether to include an intercept.\
+    Note that if `zero_mean = TRUE`, the data is assumed to be demeaned.\
+-   `phi_f_structure`: a matrix specifying the structure of the factor loadings.
+-   `method`: method for estimation, either "ML" for maximum likelihood or "EM" for expectation-maximization algorithm.
 
-For now we will do a test with a simulated dataset to illustrate the unpenalized estimation. 
+For now we will do a test with a simulated dataset to illustrate the unpenalized estimation.
 
 ## Example with simulated data
-An example of a simulated dataset with `N` = 2, `r` = `p` = 1, with which can be called by: 
+
+An example of a simulated dataset with `N` = 2, `r` = `p` = 1, with which can be called by:
+
 ```{r}
 data(simdata, package = "tvvar")  # load from your package
 str(simdata$Y[1:5, ])   # show first few rows of the simulated dataset
 ```
-gives a list with the following components:
-- `Y`: a T × N matrix containing the observed time series data.  
-- `factors`: a T × r matrix of the latent factor time series.  
-- `shocks`: a T × N matrix of the VAR shocks (innovations).  
+
+gives a list with the following components: - `Y`: a T × N matrix containing the observed time series data.\
+- `factors`: a T × r matrix of the latent factor time series.\
+- `shocks`: a T × N matrix of the VAR shocks (innovations).
 
 This dataset was simulated with the following parameters:
 
-- `T` = 1000  
-- `N` = 2  
-- `p` = 1  
-- `r` = 1  
-- `A2` = 0.1  
-- `B2` = 0.75  
-- `pphi` = 0.95  
-- `omega` = [[0.3, 0.2], [0.2, 0.3]]  
-- `Phi.c` = [[0.3, 0.15], [0, 0.3]]  
-- `Phi.f` = [[0.2, 0], [0, 0.2]]  
-- `burn_in` = 500
-
+-   `T` = 1000\
+-   `N` = 2\
+-   `p` = 1\
+-   `r` = 1\
+-   `A2` = 0.1\
+-   `B2` = 0.75\
+-   `pphi` = 0.95\
+-   `omega` = [[0.3, 0.2], [0.2, 0.3]]\
+-   `Phi.c` = [[0.3, 0.15], [0, 0.3]]\
+-   `Phi.f` = [[0.2, 0], [0, 0.2]]\
+-   `burn_in` = 500
 
 We run the unpenalized estimation using ML on the simulated dataset and retrieve the estimated parameters and log-likelihood:
+
 ```{r}
 run <- unpenalized_estimate(simdata$Y, p = 1, r = 1, zero_mean = TRUE, phi_f_structure = matrix(1, nrow = 2, ncol = 2), method = "ML")
 run$estimate
 ```
 
 and with that also the likelihoods and information criterions:
+
 ```{r}
 run$lik
 run$ic
 ```
 
+(Optionally) You can also run EM without penalties:
 
+```{r}
+run_em <- unpenalized_estimate(
+  data             = simdata$Y,
+  p                = 1,
+  r                = 1,
+  zero_mean        = TRUE,
+  phi_f_structure  = matrix(1, nrow=2, ncol=2),
+  method           = "EM",
+  em_control       = list(max_iter = 200, tol = 1e-3, trace = TRUE)
+)
+run_em$estimate
+run_em$lik
+```
 
+## Penalized estimation
 
+Penalization acts on the $\Phi_f$ block. You can use:
 
-Then we run the penalized version using EM
+-   **regular** weights → plain lasso (same λ for all free $\Phi_f$ entries)
+-   **adaptive** weights → weights computed as $begin:math:text$w_j \\propto 1/(\|\\hat\\beta\^{ML}\_j\|+\\varepsilon)$end:math:text$
 
+We first show **regular** weights:
+
+```{r}
+fit_pen_const <- penalized_estimate(
+  data            = simdata$Y,
+  p               = 1,
+  r               = 1,
+  zero_mean       = TRUE,
+  lambda_penalty  = 0.05,                 # lasso strength on Phi.f
+  penalty_type         = "adaptive",           # <-- regular weights
+  Phi.f.structure = matrix(1, 2, 2)       # same free-pattern used above
+)
+fit_pen_const$estimate
+fit_pen_const$lik
+fit_pen_const$ic
+```
 
 ## Additional resources
+
 If we wish to highlight any other notebooks/scripts that could be useful for the user to have, this would be the place to store them.
 
-
 ## References
-

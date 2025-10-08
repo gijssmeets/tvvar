@@ -2,33 +2,39 @@
 % Please edit documentation in R/penalized.R
 \name{penalized_estimate}
 \alias{penalized_estimate}
-\title{Penalized TV-VAR estimation via ECM with adaptive L1 weights}
+\title{Penalized estimation (ECM) with optional adaptive weights}
 \usage{
 penalized_estimate(
   data,
   p,
   r,
-  phi_f_structure,
   zero_mean = TRUE,
-  lambda = c(0.015, 0.015),
-  control = list(tol = 0.001, max_iter = 200, trace = TRUE, maxit = 2000)
+  lambda_penalty = 0.01,
+  penalty_type = c("adaptive", "regular"),
+  Phi.f.structure = NULL,
+  Omega_init = NULL
 )
 }
 \arguments{
-\item{data}{T x N numeric matrix}
+\item{data}{numeric matrix (T x N)}
 
-\item{p}{lag order}
+\item{p}{integer VAR lag order}
 
-\item{r}{number of factors}
+\item{r}{integer number of factors}
 
-\item{phi_f_structure}{restrictions: 3D \link{N,N,r}, list of r (N x N), or N x (N*r) block}
+\item{zero_mean}{logical; if TRUE, intercepts fixed at 0}
 
-\item{zero_mean}{logical; TRUE fixes intercept to 0}
+\item{lambda_penalty}{numeric scalar; L1 penalty level for Phi.f}
 
-\item{lambda}{length-2 numeric: c(lambda_c, lambda_f)}
+\item{penalty_type}{"adaptive" or "regular"}
 
-\item{control}{list(tol, max_iter, trace, maxit for inner ML if needed)}
+\item{Phi.f.structure}{optional free-pattern for Phi^f (3D array \link{N,N,r}, list of r N x N, or N x (N*r) matrix)}
+
+\item{Omega_init}{optional N x N PD matrix for initialization (used by your init code if applicable)}
+}
+\value{
+tvvar_fit list (same fields as unpenalized_estimate output)
 }
 \description{
-Penalized TV-VAR estimation via ECM with adaptive L1 weights
+Penalized estimation (ECM) with optional adaptive weights
 }
