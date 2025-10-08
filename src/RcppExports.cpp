@@ -11,6 +11,26 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// irf_generator_cpp
+List irf_generator_cpp(arma::cube Phi, const arma::vec& psi, const arma::vec& aT, const arma::mat& PT, const arma::mat& HT, const arma::vec& ek, const int lags, const bool fixed, const int B, const int seed_f);
+RcppExport SEXP _tvvar_irf_generator_cpp(SEXP PhiSEXP, SEXP psiSEXP, SEXP aTSEXP, SEXP PTSEXP, SEXP HTSEXP, SEXP ekSEXP, SEXP lagsSEXP, SEXP fixedSEXP, SEXP BSEXP, SEXP seed_fSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::cube >::type Phi(PhiSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type psi(psiSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type aT(aTSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type PT(PTSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type HT(HTSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type ek(ekSEXP);
+    Rcpp::traits::input_parameter< const int >::type lags(lagsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type fixed(fixedSEXP);
+    Rcpp::traits::input_parameter< const int >::type B(BSEXP);
+    Rcpp::traits::input_parameter< const int >::type seed_f(seed_fSEXP);
+    rcpp_result_gen = Rcpp::wrap(irf_generator_cpp(Phi, psi, aT, PT, HT, ek, lags, fixed, B, seed_f));
+    return rcpp_result_gen;
+END_RCPP
+}
 // check_lyapunov
 double check_lyapunov(const arma::mat& Phi_c, const arma::cube& Phi_f, const arma::vec& phi_r, int seed, int D, int m);
 RcppExport SEXP _tvvar_check_lyapunov(SEXP Phi_cSEXP, SEXP Phi_fSEXP, SEXP phi_rSEXP, SEXP seedSEXP, SEXP DSEXP, SEXP mSEXP) {
@@ -80,6 +100,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_tvvar_irf_generator_cpp", (DL_FUNC) &_tvvar_irf_generator_cpp, 10},
     {"_tvvar_check_lyapunov", (DL_FUNC) &_tvvar_check_lyapunov, 6},
     {"_tvvar_my_loop_main", (DL_FUNC) &_tvvar_my_loop_main, 10},
     {"_tvvar_create_Y_minus1", (DL_FUNC) &_tvvar_create_Y_minus1, 4},

@@ -47,7 +47,18 @@ double check_lyapunov(const arma::mat& Phi_c, const arma::cube& Phi_f, const arm
       Phi_t_array.slice(j).submat(0, 0, dim_VAR - 1, adjusted_Phi_f.n_cols - 1) = adjusted_Phi_f;
       
       // Identity block in the second part
-      Phi_t_array.slice(j).submat(dim_VAR, 0, dim_VAR * lag_order - 1, dim_VAR - 1) = eye<arma::mat>(dim_VAR, dim_VAR);
+      // Phi_t_array.slice(j).submat(dim_VAR, 0, dim_VAR * lag_order - 1, dim_VAR - 1) = eye<arma::mat>(dim_VAR, dim_VAR);
+      
+      if (lag_order > 1) {
+        for (int b = 1; b < lag_order; ++b) {
+          int row0 = dim_VAR * b;
+          int col0 = dim_VAR * (b - 1);
+          Phi_t_array.slice(j).submat(row0, col0,
+                            row0 + dim_VAR - 1,
+                            col0 + dim_VAR - 1) = arma::eye<arma::mat>(dim_VAR, dim_VAR);
+        }
+      }
+        
     }
     
     arma::mat prod_Phi_t = Phi_t_array.slice(0);
