@@ -225,7 +225,11 @@ as.list(result)
 
 
 
-hessian.fct.tr <- function(params, VAR.data, Phi.f.array, zero.mean){
+hessian.fct.tr <- function(params, VAR.data, Phi.f.array, zero.mean, cfg){
+  number.factors <- cfg$number.factors
+  dim.VAR <- cfg$dim.VAR
+  lag.order <- cfg$lag.order
+  
   
   A <- params[1]
   B <- params[2]
@@ -291,6 +295,9 @@ hessian.fct.tr <- function(params, VAR.data, Phi.f.array, zero.mean){
 
 
 hessian.fct.untr <- function(params, VAR.data, Phi.f.array, zero.mean, cfg){
+  
+
+  
   number.factors <- cfg$number.factors
   dim.VAR <- cfg$dim.VAR
   lag.order <- cfg$lag.order
