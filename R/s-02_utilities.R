@@ -403,7 +403,7 @@ optim_Phi_f_full_likelihood <- function(opti.eval.em, params, data, Phi.f.array,
   if(type == 'regular'){
     print('regular!')
     opts <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3)
-    prox_grad_result <- apg(grad_for_apg, apg::prox.l1, length(Phi.f.init), opts)
+    prox_grad_result <- apg::apg(grad_for_apg, apg::prox.l1, length(Phi.f.init), opts)
     phi_est_penalized <- prox_grad_result$x
   }
   
@@ -412,7 +412,7 @@ optim_Phi_f_full_likelihood <- function(opti.eval.em, params, data, Phi.f.array,
     print('adaptive!')
     step_size <- 0.1 
     opts_weighted <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3, weights = weights, FIXED_STEP_SIZE = TRUE, STEP_SIZE = step_size)
-    prox_grad_result_weighted <- apg(grad_for_apg, prox_l1_weighted, length(Phi.f.init), opts_weighted)
+    prox_grad_result_weighted <- apg::apg(grad_for_apg, prox_l1_weighted, length(Phi.f.init), opts_weighted)
     phi_est_penalized <- prox_grad_result_weighted$x
   }
   
