@@ -1,6 +1,6 @@
 #' Unpenalized estimation (ML or EM) for TV-VAR
 #' @export
-unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
+unpenalized_estimate <- function(data, p, r, zero.mean = TRUE,
                                  phi_f_structure,
                                  method = c("ML","EM"),
                                  control = list(maxit = 2000, trace = 0),
@@ -11,9 +11,9 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
   
   
   if (identical(method, "ML")) {
-    return(.unpen_ml(data, p, r, zero_mean, phi_f_structure, control))
+    return(.unpen_ml(data, p, r, zero.mean, phi_f_structure, control))
   } else {
-    return(.unpen_em(data, p, r, zero_mean, phi_f_structure, em_control))
+    return(.unpen_em(data, p, r, zero.mean, phi_f_structure, em_control))
   }
 }
 
@@ -21,7 +21,7 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
 
 
 #' @keywords internal
-.unpen_em <- function(data, p, r, zero_mean, phi_f_structure, em_control) {
+.unpen_em <- function(data, p, r, zero.mean, phi_f_structure, em_control) {
   Y <- as.matrix(data)
   n_var <- ncol(Y); T.fin <- nrow(Y)
   
@@ -34,7 +34,7 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
     dim.VAR = n_var,
     lag.order = p,
     number.factors = r,
-    zero.mean = isTRUE(zero_mean)
+    zero.mean = isTRUE(zero.mean)
   )
   
   # --- initialization (same as ML) ---
@@ -48,7 +48,7 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
   Xlag <- do.call(cbind, lapply(1:p, function(L) Y[(p + 1 - L):(T.fin - L), , drop = FALSE]))
   X <- cbind(1, Xlag)
   Bhat <- vapply(seq_len(n_var), function(j) lm.fit(X, Ydep[, j])$coefficients, numeric(ncol(X)))
-  Phi_c0 <- t(Bhat); if (isTRUE(zero_mean)) Phi_c0[, 1] <- 0
+  Phi_c0 <- t(Bhat); if (isTRUE(zero.mean)) Phi_c0[, 1] <- 0
   
   # number of free Phi.f params (mask)
   Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
@@ -146,9 +146,9 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
   Lmat[upper.tri(Lmat)] <- 0
   Omega <- Lmat %*% t(Lmat)
   
-  need <- if (isTRUE(zero_mean)) n_var^2 * p else (n_var^2 * p + n_var)
+  need <- if (isTRUE(zero.mean)) n_var^2 * p else (n_var^2 * p + n_var)
   Phi_c_vec <- params[idx:(idx + need - 1L)]
-  Phi_c <- if (isTRUE(zero_mean)) cbind(0, matrix(Phi_c_vec, nrow = n_var)) else matrix(Phi_c_vec, nrow = n_var)
+  Phi_c <- if (isTRUE(zero.mean)) cbind(0, matrix(Phi_c_vec, nrow = n_var)) else matrix(Phi_c_vec, nrow = n_var)
   
   # ICs
   K <- length(c(A, B, phi_r)) + n_phi_free + Nstar + length(Phi_c_vec)
@@ -165,7 +165,7 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
     eval = ev,
     optim = list(par = params, value = obj, convergence = NA,
                  counts = NA, message = sprintf("EM finished in %d iters", iter)),
-    meta = list(N = n_var, p = p, r = r, zero_mean = isTRUE(zero_mean),
+    meta = list(N = n_var, p = p, r = r, zero.mean = isTRUE(zero.mean),
                 nobs = T.fin, method = "EM")
   )
   class(out) <- "tvvar_fit"
@@ -176,16 +176,16 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
 
 
 #' Unpenalized estimation (ML) for TV-VAR — minimal wrapper
-#' @param data numeric matrix (T x N), already transformed (demeaned if zero_mean=TRUE).
+#' @param data numeric matrix (T x N), already transformed (demeaned if zero.mean=TRUE).
 #' @param p integer, VAR lag order.
 #' @param r integer, number of factors.
-#' @param zero_mean logical; TRUE fixes intercept to 0.
+#' @param zero.mean logical; TRUE fixes intercept to 0.
 #' @param phi_f_structure 3D array [N,N,r], or list of r (N x N) matrices, or block matrix N x (N*r).
 #' @param control list for optim (e.g., list(maxit=2000, trace=0)).
 #' @return list with estimates, likelihood, ICs, eval, optim info.
 #' @export
 #' @keywords internal
-.unpen_ml <- function(data, p, r, zero_mean, phi_f_structure, control) {
+.unpen_ml <- function(data, p, r, zero.mean, phi_f_structure, control) {
   Y <- as.matrix(data)
   n_var <- ncol(Y); T.fin <- nrow(Y)
   
@@ -198,21 +198,33 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
     dim.VAR = n_var,
     lag.order = p,
     number.factors = r,
-    zero.mean = isTRUE(zero_mean)
+    zero.mean = isTRUE(zero.mean)
   )
   
   # --- initialization (same as EM) ---
   logit <- function(x) log(x/(1 - x))
   A0 <- 0.10; B0 <- 0.80
   phi_r0 <- if (r > 0) rep(0.95, r) else numeric(0L)
-  Omega0 <- diag(0.1, n_var)
+  Omega0 <- matrix(0.2, n_var, n_var)   # fill with 0.2 off-diagonal
+  diag(Omega0) <- 0.3   
   
-  # OLS VAR for Phi_c
-  Ydep <- Y[(p + 1):T.fin, , drop = FALSE]
-  Xlag <- do.call(cbind, lapply(1:p, function(L) Y[(p + 1 - L):(T.fin - L), , drop = FALSE]))
-  X <- cbind(1, Xlag)
-  Bhat <- vapply(seq_len(n_var), function(j) lm.fit(X, Ydep[, j])$coefficients, numeric(ncol(X)))
-  Phi_c0 <- t(Bhat); if (isTRUE(zero_mean)) Phi_c0[, 1] <- 0
+  ## --- Estimate Phi^c as coefficient matrix in static VAR (exact Gorgi-style) ---
+  Y_named <- as.data.frame(Y)
+  colnames(Y_named) <- paste0("y", seq_len(ncol(Y_named)))
+  
+  B.t <- matrix(0, nrow = n_var, ncol = (n_var * p + 1))
+  for (j in 1:n_var) {
+    B.t[j, ] <- coefficients(VAR(Y_named, p = p))[[j]][, 1]
+  }
+  
+  A.t <- B.t[, -(n_var * p + 1), drop = FALSE]   # drop intercept column
+  
+  ## case of nonzero intercept
+  if (isFALSE(zero.mean)) {
+    A.t <- cbind(B.t[, (n_var * p + 1), drop = FALSE], A.t)
+  }
+  
+  Phi_c0 <- A.t
   
   # number of free Phi.f params (mask)
   Phi.f.as.matrix <- matrix(Phi.f.array, nrow = n_var)
@@ -241,16 +253,27 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
     control = control
   )
   
-  # Evaluate
+  # evaluates at ML optimum
   ev <- opti.fct(
-    par_free   = opt$par,
-    par_fixed  = NaN,
-    VAR.data   = Y,
+    par_free    = opt$par,
+    par_fixed   = NaN,
+    VAR.data    = Y,
     Phi.f.array = Phi.f.array,
-    cfg = cfg,
-    Smooth = FALSE,
-    purpose = "eval"
+    cfg         = cfg,
+    Smooth      = TRUE,
+    purpose     = "eval"
   )
+  
+  p_out <- opt$par
+  T.fin <- nrow(Y)  
+  my.hess      <- optimHess(p_out, hessian.fct.untr,
+                            VAR.data = Y, Phi.f.array = Phi.f.array,
+                            zero.mean = isTRUE(zero.mean), cfg = cfg)
+  
+  cov.matrix   <- solve(my.hess * T.fin)
+
+  
+  
   
   # ---- unpack params to estimates (mirror slicing in opti.fct) ----
   inv_logit <- stats::plogis
@@ -278,9 +301,9 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
   Lmat[upper.tri(Lmat)] <- 0
   Omega <- Lmat %*% t(Lmat)
   
-  need <- if (isTRUE(zero_mean)) n_var^2 * p else (n_var^2 * p + n_var)
+  need <- if (isTRUE(zero.mean)) n_var^2 * p else (n_var^2 * p + n_var)
   Phi_c_vec <- opt$par[idx:(idx + need - 1L)]
-  Phi_c <- if (isTRUE(zero_mean)) cbind(0, matrix(Phi_c_vec, nrow = n_var)) else matrix(Phi_c_vec, nrow = n_var)
+  Phi_c <- if (isTRUE(zero.mean)) cbind(0, matrix(Phi_c_vec, nrow = n_var)) else matrix(Phi_c_vec, nrow = n_var)
   
   # ICs
   K <- length(c(A, B, phi_r)) + n_phi_free + Nstar + length(Phi_c_vec)
@@ -294,11 +317,12 @@ unpenalized_estimate <- function(data, p, r, zero_mean = TRUE,
                     Phi_f = Phi.f.est, Phi_c = Phi_c, Omega = Omega),
     lik = list(avg = ev$average.L, sum = ev$full.L),
     ic  = list(AIC = AIC, AICc = AICc, BIC = BIC),
-    eval = ev,
     optim = list(par = opt$par, value = opt$value, convergence = opt$convergence,
                  counts = opt$counts, message = opt$message),
-    meta = list(N = n_var, p = p, r = r, zero_mean = isTRUE(zero_mean),
-                nobs = T.fin, method = "ML")
+    vcov = cov.matrix,
+    theta = p_out,
+    meta = list(N = n_var, p = p, r = r, zero.mean = isTRUE(zero.mean),
+                nobs = T.fin, method = "ML", Phi.f.array = Phi.f.array)
   )
   class(out) <- "tvvar_fit"
   out
