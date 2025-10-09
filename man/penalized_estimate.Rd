@@ -6,13 +6,14 @@
 \usage{
 penalized_estimate(
   data,
-  p,
-  r,
-  zero_mean = TRUE,
+  p = 1,
+  r = 1,
+  zero.mean = TRUE,
   lambda_penalty = 0.01,
   penalty_type = c("adaptive", "regular"),
   Phi.f.structure = NULL,
-  Omega_init = NULL
+  init = c("default", "random", "custom"),
+  init_list = NULL
 )
 }
 \arguments{
@@ -22,15 +23,17 @@ penalized_estimate(
 
 \item{r}{integer number of factors}
 
-\item{zero_mean}{logical; if TRUE, intercepts fixed at 0}
+\item{zero.mean}{logical; if TRUE, intercepts fixed at 0}
 
 \item{lambda_penalty}{numeric scalar; L1 penalty level for Phi.f}
 
 \item{penalty_type}{"adaptive" or "regular"}
 
-\item{Phi.f.structure}{optional free-pattern for Phi^f (3D array \link{N,N,r}, list of r N x N, or N x (N*r) matrix)}
+\item{Phi.f.structure}{optional free-pattern for Phi^f (3D \link{N,N,r}, list of r N x N, or N x (N*r) matrix)}
 
-\item{Omega_init}{optional N x N PD matrix for initialization (used by your init code if applicable)}
+\item{init}{"default", "random", or "custom"}
+
+\item{init_list}{named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)}
 }
 \value{
 tvvar_fit list (same fields as unpenalized_estimate output)

@@ -2,19 +2,104 @@
 % Please edit documentation in R/unpenalized.R
 \name{unpenalized_estimate}
 \alias{unpenalized_estimate}
-\title{Unpenalized estimation (ML or EM) for TV-VAR}
+\title{Unpenalized estimation for TV–VAR (ML or EM)}
 \usage{
 unpenalized_estimate(
   data,
-  p,
-  r,
-  zero_mean = TRUE,
+  p = 1,
+  r = 1,
+  zero.mean = TRUE,
   phi_f_structure,
   method = c("ML", "EM"),
   control = list(maxit = 2000, trace = 0),
-  em_control = list(max_iter = 200, tol = 0.001, trace = TRUE)
+  em_control = list(max_iter = 200, tol = 0.001, trace = TRUE),
+  init = c("default", "random", "custom"),
+  init_list = NULL
 )
 }
+\arguments{
+\item{data}{Numeric matrix \code{T x N} (rows = time, cols = variables).}
+
+\item{p}{Integer VAR lag order.}
+
+\item{r}{Integer number of latent factors (state dimension).}
+
+\item{zero.mean}{Logical; if \code{TRUE}, intercepts in \eqn{\Phi^c} are fixed at 0.}
+
+\item{phi_f_structure}{Free pattern for \eqn{\Phi^f}. One of:
+\itemize{
+\item 3D array \code{[N, N, r]} (one \eqn{N \times N} slice per factor),
+\item list of \code{r} \code{N x N} matrices,
+\item block matrix \code{N x (N*r)} (concatenated by columns).
+}
+Use ones for “free”, zeros for “fixed at 0”.}
+
+\item{method}{One of \code{"ML"} (direct BFGS on likelihood) or \code{"EM"}.}
+
+\item{control}{List of optimizer controls passed to ML (e.g. \code{list(maxit=2000, trace=0)}).}
+
+\item{em_control}{List of EM controls
+(e.g. \code{list(max_iter=200, tol=1e-3, trace=TRUE)}).}
+
+\item{init}{Initialization mode: \code{"default"}, \code{"random"}, or \code{"custom"}.
+See Details.}
+
+\item{init_list}{Named list of custom initial values used when \code{init="custom"}.
+Recognized elements: \code{A}, \code{B}, \code{phi_r}, \code{Omega} (\eqn{N \times N}),
+\code{Phi_c} (\eqn{N \times (1+Np)} or \eqn{N \times Np} if \code{zero.mean=TRUE}),
+and \code{Phi_f} (vector for the free \eqn{\Phi^f} entries in mask order).}
+}
+\value{
+A \code{tvvar_fit} list (same structure used by \code{penalized_estimate()}).
+}
 \description{
-Unpenalized estimation (ML or EM) for TV-VAR
+Fits the time-varying VAR using either direct maximum likelihood (ML) or
+an EM routine, without sparsity penalties. Shares the same output structure
+as \code{penalized_estimate()} so downstream code (IRFs, summaries, plots)
+works uniformly.
+}
+\details{
+Initialization:
+\itemize{
+\item \strong{default}: \eqn{A=0.10}, \eqn{B=0.80}, \eqn{\phi_r=0.95}, \eqn{\Omega} with
+0.3 on diagonal and 0.2 off-diagonal, and small 0.01 values for free \eqn{\Phi^f}.
+\eqn{\Phi^c} is initialized via a static VAR (Gorgi-style), respecting \code{zero.mean}.
+\item \strong{random}: draws reasonable random starting values (bounded and PD).
+\item \strong{custom}: take values from \code{init_list} (fallback to defaults if a field is missing).
+}
+
+The returned object has class \code{"tvvar_fit"} and contains:
+\itemize{
+\item \code{$estimate}: list with \code{A}, \code{B}, \code{phi_r}, \code{Phi_f}, \code{Phi_c}, \code{Omega}.
+\item \code{$lik}: average and summed log-likelihood.
+\item \code{$ic}: AIC, AICc, BIC (computed in the usual unpenalized way).
+\item \code{$eval}: last evaluation bundle (e.g., filtered states).
+\item \code{$optim}: optimizer details.
+\item \code{$vcov}: asymptotic covariance matrix (if computed in your ML core).
+\item \code{$theta}: final parameter vector (unconstrained scale).
+\item \code{$meta}: dims, method, free pattern, and \code{time} (runtime in seconds).
+}
+}
+\examples{
+\dontrun{
+# ML with default init
+fit_ml <- unpenalized_estimate(
+  data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
+  phi_f_structure = matrix(1, 2, 2), method = "ML"
+)
+
+# EM with random init
+fit_em <- unpenalized_estimate(
+  data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
+  phi_f_structure = matrix(1, 2, 2), method = "EM",
+  init = "random"
+)
+
+# ML with custom init for A and B only (others fall back to defaults)
+fit_ml_custom <- unpenalized_estimate(
+  data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
+  phi_f_structure = matrix(1, 2, 2), method = "ML",
+  init = "custom", init_list = list(A = 0.2, B = 0.7)
+)
+}
 }
