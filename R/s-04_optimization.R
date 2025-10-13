@@ -8,8 +8,13 @@ dim.VAR = cfg$dim.VAR
 lag.order = cfg$lag.order
 number.factors = cfg$number.factors
   
-# Combine [vec] par_free (free to optimise params) and [list] par_fixed (conditionally maximized params) into [vec] params
-params <- rebuild_params(par_free, par_fixed)
+if (is.numeric(par_free)) {
+  params <- par_free                 # ML / plain numeric path
+} else if (is.list(par_free)) {
+  params <- rebuild_params(par_free, par_fixed)  # EM / blocked updates
+} else {
+  stop("`par_free` must be a numeric vector or a named list.")
+}
 
 # Transform back to (0,1) space
 A <- exp(params[1])/(1+exp(params[1]))

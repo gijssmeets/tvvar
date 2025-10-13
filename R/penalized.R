@@ -3,41 +3,51 @@
 #' @param data            numeric matrix (T x N)
 #' @param p               integer VAR lag order
 #' @param r               integer number of factors
-#' @param zero_mean       logical; if TRUE, intercepts fixed at 0
+#' @param zero.mean       logical; if TRUE, intercepts fixed at 0
 #' @param lambda_penalty  numeric scalar; L1 penalty level for Phi.f
 #' @param penalty_type    "adaptive" or "regular"
-#' @param Phi.f.structure optional free-pattern for Phi^f (3D array [N,N,r], list of r N x N, or N x (N*r) matrix)
-#' @param Omega_init      optional N x N PD matrix for initialization (used by your init code if applicable)
+#' @param Phi.f.structure optional free-pattern for Phi^f (3D [N,N,r], list of r N x N, or N x (N*r) matrix)
+#' @param init            "default", "random", or "custom"
+#' @param init_list       named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
 #' @return tvvar_fit list (same fields as unpenalized_estimate output)
 #' @export
 penalized_estimate <- function(data,
-                               p,
-                               r,
-                               zero_mean = TRUE,
+                               p = 1,
+                               r = 1,
+                               zero.mean = TRUE,
                                lambda_penalty = 0.01,
                                penalty_type = c("adaptive", "regular"),
                                Phi.f.structure = NULL,
-                               Omega_init = NULL) {
+                               init = c("default", "random", "custom"),
+                               init_list = NULL) {
+  start_time   <- Sys.time()
   penalty_type <- match.arg(penalty_type)
+  init         <- match.arg(init)
   
-  # ---- data & dims ----
+  ## ---- data & dims ----
   Y <- as.matrix(data)
-  if (!is.numeric(Y) || length(dim(Y)) != 2L) stop("`data` must be a numeric T x N matrix.")
+  if (!is.numeric(Y) || length(dim(Y)) != 2L)
+    stop("`data` must be a numeric T x N matrix.")
   T.fin <- nrow(Y); N <- ncol(Y)
   
-  Phi.f.str <- array(1, dim = c(N,N,r))
-  Phi.f.array <- make.Phi.f(structure = Phi.f.str, lag.order = p)
-  Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)      # same flattening as legacy code
+  ## ---- structure setup (aligned with unpen ML/EM) ----
+  # default structure: all ones per factor if nothing provided
+  base_struct <- if (is.null(Phi.f.structure)) matrix(1, N, N) else Phi.f.structure
+  phi_arr <- .normalize_phi_structure(base_struct, N = N, r = r)
+  Phi.f.array <- make.Phi.f(structure = phi_arr, lag.order = p)
+  
+  # mask for free Phi.f entries (legacy flattening)
+  Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)
   Phi.f.mask   <- (Phi.f.as.mat != 0)
   n_phi_free   <- sum(Phi.f.mask)
-
-  # ---- minimal cfg for legacy code ----
+  
+  ## ---- cfg (consistent with unpen ML/EM) ----
   cfg <- list(
     dim.VAR = N,
     lag.order = p,
     number.factors = r,
-    zero.mean = isTRUE(zero_mean),
+    zero.mean = isTRUE(zero.mean),
     T = T.fin,
     T.here = T.fin - p,
     Phi.f.array = Phi.f.array,
@@ -45,35 +55,32 @@ penalized_estimate <- function(data,
     data = Y,
     penalty_type = penalty_type
   )
-  if (!is.null(Omega_init)) cfg$omega <- Omega_init
   
-  # ---- initial parameters (your existing initializer) ----
-  params0 <- initialize_parameters(Y, Phi.f.as.mat, cfg)
+  ## ---- initialization (shared) ----
+  if (!is.null(init_list) && !is.list(init_list)) init_list <- as.list(init_list)
+  init_res <- .tvvar_build_par_init(
+    Y = Y, p = p, r = r, zero.mean = zero.mean,
+    Phi.f.array = Phi.f.array,
+    init = init, init_list = init_list
+  )
+  params0     <- init_res$par_init
+  n_phi_free0 <- init_res$n_phi_free  # for sanity (should equal n_phi_free)
   
-  # ---- choose weights for Phi.f ----
+  ## ---- adaptive or regular weights for Phi.f ----
   if (identical(penalty_type, "adaptive")) {
-    # *** ADAPTIVE WEIGHTS FROM UNPENALIZED ML ***
     fit_ml <- unpenalized_estimate(
-      data = Y, p = p, r = r, zero_mean = zero_mean,
-      phi_f_structure = maxtrix(1, nrow=N,ncol=N), method = "ML"
+      data = Y, p = p, r = r, zero.mean = zero.mean,
+      phi_f_structure = matrix(1, nrow = N, ncol = N),
+      method = "ML", init = "default"
     )
-    # extract free Phi.f entries (by mask order)
+    # extract ML Phi.f on the free pattern
     Phi.f_ml_free <- matrix(fit_ml$estimate$Phi_f, nrow = N)[Phi.f.mask]
     w.Phi.f <- (1 / (abs(Phi.f_ml_free) + 1e-6)) / 2
-    
-    # optional: zero-out diagonal-group weights if that's your convention
-    diag_idx <- calc_indices_of_lambda_diagonals(N, p, r)
-    if (!is.null(diag_idx$without_zeros)) {
-      idx <- diag_idx$without_zeros
-      idx <- idx[idx >= 1 & idx <= length(w.Phi.f)]
-      if (length(idx)) w.Phi.f[idx] <- 0
-    }
   } else {
-    # constant weights → plain lasso
     w.Phi.f <- 1
   }
   
-  # ---- run penalized ECM (uses your em_algorithm and APG inside Phi.f C-step) ----
+  ## ---- run penalized ECM (your routine) ----
   fit_pen <- em_algorithm(
     params      = params0,
     data        = Y,
@@ -85,7 +92,7 @@ penalized_estimate <- function(data,
     weights.f   = w.Phi.f
   )
   
-  # ---- evaluate once to collect likelihood etc. ----
+  ## ---- one evaluation for likelihoods ----
   ev <- opti.fct(
     par_free    = fit_pen$par,
     par_fixed   = NaN,
@@ -96,13 +103,14 @@ penalized_estimate <- function(data,
     purpose     = "eval"
   )
   
-  # ---- unpack (mirror unpenalized) ----
+  ## ---- unpack estimates (mirror unpenalized) ----
   inv_logit <- stats::plogis
   params <- fit_pen$par
   idx <- 1L
   A  <- inv_logit(params[idx]); idx <- idx + 1L
   B  <- inv_logit(params[idx]); idx <- idx + 1L
-  phi_r <- if (r > 0) { x <- inv_logit(params[idx:(idx + r - 1L)]); idx <- idx + r; x } else numeric(0L)
+  phi_r <- if (r > 0) inv_logit(params[idx:(idx + r - 1L)]) else numeric(0L)
+  idx <- idx + length(phi_r)
   
   Phi.f.est.mat <- matrix(0, nrow = nrow(Phi.f.as.mat), ncol = ncol(Phi.f.as.mat))
   if (n_phi_free > 0) {
@@ -117,28 +125,37 @@ penalized_estimate <- function(data,
   Lmat[upper.tri(Lmat)] <- 0
   Omega <- Lmat %*% t(Lmat)
   
-  need <- if (isTRUE(zero_mean)) N^2 * p else (N^2 * p + N)
+  need <- if (isTRUE(zero.mean)) N^2 * p else (N^2 * p + N)
   Phi_c_vec <- params[idx:(idx + need - 1L)]
-  Phi_c <- if (isTRUE(zero_mean)) cbind(0, matrix(Phi_c_vec, nrow = N)) else matrix(Phi_c_vec, nrow = N)
+  Phi_c <- if (isTRUE(zero.mean))
+    cbind(0, matrix(Phi_c_vec, nrow = N)) else matrix(Phi_c_vec, nrow = N)
   
-  # ---- ICs (same fields as unpenalized; naive under penalty) ----
+  ## ---- ICs (naive under penalty) ----
   K <- length(c(A, B, phi_r)) + n_phi_free + Nstar + length(Phi_c_vec)
   n_eff <- (T.fin - p) * N
   AIC  <-  2 * K + 2 * ev$average.L * (T.fin - p)
-  AICc <-  AIC + (2*K^2 + 2*K) / (max(1, n_eff - K - 1))
+  AICc <-  AIC + (2 * K^2 + 2 * K) / (max(1, n_eff - K - 1))
   BIC  <-  log(n_eff) * K + 2 * ev$average.L * (T.fin - p)
   
+  end_time <- Sys.time()
+  runtime_sec <- as.numeric(difftime(end_time, start_time, units = "secs"))
+  
+  ## ---- output (same structure as ML/EM) ----
   out <- list(
     estimate = list(A = A, B = B, phi_r = phi_r,
                     Phi_f = Phi.f.est, Phi_c = Phi_c, Omega = Omega),
     lik = list(avg = ev$average.L, sum = ev$full.L),
     ic  = list(AIC = AIC, AICc = AICc, BIC = BIC),
     eval = ev,
-    optim = list(par = fit_pen$par, value = fit_pen$obj, convergence = NA,
-                 counts = NA, message = sprintf("ECM-penalized (lambda=%.4g, weights=%s)", lambda_penalty, penalty_type)),
-    meta = list(N = N, p = p, r = r, zero_mean = isTRUE(zero_mean),
-                nobs = T.fin, method = "ECM-penalized",
-                lambda = c(0, lambda_penalty), weights = penalty_type)
+    optim = list(par = params, value = fit_pen$obj, convergence = NA,
+                 counts = NA, message = sprintf("ECM-penalized (lambda=%.4g, %s)", lambda_penalty, penalty_type)),
+    vcov  = matrix(NA_real_, length(params), length(params)),  # placeholder under L1
+    theta = params,
+    meta  = list(N = N, p = p, r = r, zero.mean = isTRUE(zero.mean),
+                 nobs = T.fin, method = "ECM-penalized",
+                 Phi.f.array = Phi.f.array,
+                 lambda = lambda_penalty, weights = penalty_type,
+                 init = init, time = runtime_sec)
   )
   class(out) <- "tvvar_fit"
   out

@@ -1,75 +1,381 @@
+# ---- helper: parameter indexing & names (must match your packing order) ----
+.tvvar_param_index <- function(fit) {
+  meta <- fit$meta
+  N    <- meta$N; p <- meta$p; r <- meta$r
+  zm   <- isTRUE(meta$zero.mean)
+  arr  <- meta$Phi.f.array    # N x (1+N*p) x r
+  
+  # mask for free Phi_f entries (same flattening used in packing)
+  Phi.f.mat  <- matrix(arr, nrow = N)
+  mask       <- (Phi.f.mat != 0)
+  n_phi_free <- sum(mask)
+  
+  Nstar <- N * (N + 1L) / 2L
+  needC <- if (zm) N^2 * p else (N^2 * p + N)
+  
+  # names: A, B, phi_r
+  names_head <- c("A", "B")
+  if (r > 0) names_head <- c(names_head, paste0("phi_r[", seq_len(r), "]"))
+  
+  # names: Phi_f free entries
+  # column mapping: for col c in 1:( (1+N*p)*r ), j = ((c-1) %% (1+N*p)) + 1, k = floor((c-1)/(1+N*p)) + 1
+  build_names_Phi_f <- function() {
+    nm <- character(0)
+    if (n_phi_free == 0) return(nm)
+    idx_cols <- which(colSums(mask) >= 0)  # just to get range
+    total_cols <- ncol(mask)
+    # loop over all matrix entries; add names only where mask TRUE
+    for (c in seq_len(total_cols)) {
+      j <- ((c - 1L) %% (1 + N * p)) + 1L  # regressor column 1..(1+N*p)
+      k <- (c - 1L) %/% (1 + N * p) + 1L   # factor slice 1..r
+      for (i in seq_len(N)) {
+        if (mask[i, c]) {
+          if (j == 1L) {
+            reglab <- "const"
+          } else {
+            off <- j - 1L
+            var <- ((off - 1L) %% N) + 1L
+            lag <- (off - 1L) %/% N + 1L
+            reglab <- sprintf("y%d_lag%d", var, lag)
+          }
+          nm <- c(nm, sprintf("Phi_f[%d,%s,f%d]", i, reglab, k))
+        }
+      }
+    }
+    nm
+  }
+  
+  names_phi_f <- build_names_Phi_f()
+  
+  # names: vech(L) entries (Cholesky factor for Omega).  We just label by (row,col).
+  L_names <- {
+    out <- character(0)
+    for (j in seq_len(N)) {
+      for (i in j:N) out <- c(out, sprintf("L[%d,%d]", i, j))
+    }
+    out
+  }
+  
+  # names: Phi_c vector (by row-major unpacking consistent with your packing)
+  # Phi_c is N x (1 + N*p) if zero.mean=FALSE, or cbind(0, N x N*p) if zero.mean=TRUE.
+  build_names_Phi_c <- function() {
+    nm <- character(0)
+    if (zm) {
+      # no intercept in params; just lagged regressors
+      for (i in seq_len(N)) {
+        for (lag in seq_len(p)) {
+          for (var in seq_len(N)) {
+            nm <- c(nm, sprintf("Phi_c[%d,y%d_lag%d]", i, var, lag))
+          }
+        }
+      }
+    } else {
+      # intercept first, then lagged
+      for (i in seq_len(N)) nm <- c(nm, sprintf("Phi_c[%d,const]", i))
+      for (i in seq_len(N)) {
+        for (lag in seq_len(p)) {
+          for (var in seq_len(N)) {
+            nm <- c(nm, sprintf("Phi_c[%d,y%d_lag%d]", i, var, lag))
+          }
+        }
+      }
+    }
+    nm
+  }
+  names_phi_c <- build_names_Phi_c()
+  
+  # indices for slicing in theta (match your packing in opti.fct / unpen code)
+  n_head      <- 2L + r
+  i_head      <- seq_len(n_head)
+  i_phi_f     <- if (n_phi_free > 0) (max(i_head) + 1L):(max(i_head) + n_phi_free) else integer(0)
+  i_L         <- if (Nstar > 0) (if (length(i_phi_f)) max(i_phi_f) else max(i_head)) + 1L
+  i_L         <- if (Nstar > 0) i_L:(i_L + Nstar - 1L) else integer(0)
+  i_phi_c     <- if (needC > 0) (if (length(i_L)) max(i_L) else if (length(i_phi_f)) max(i_phi_f) else max(i_head)) + 1L
+  i_phi_c     <- if (needC > 0) i_phi_c:(i_phi_c + needC - 1L) else integer(0)
+  
+  list(
+    idx = list(head = i_head, phi_f = i_phi_f, L = i_L, phi_c = i_phi_c),
+    names = c(names_head, names_phi_f, L_names, names_phi_c)
+  )
+}
+
+# ---- main tidy/summary function ----
+#' Summarize a tvvar_fit object
+#'
+#' @description
+#' Produces a formatted summary table for a fitted time-varying VAR model estimated
+#' via ML, EM, or penalized ECM.  
+#' The summary includes point estimates, (optional) standard errors, z-statistics,
+#' and p-values, plus model information criteria and runtime.  
+#' It supports all outputs created by \code{\link{unpenalized_estimate}} and
+#' \code{\link{penalized_estimate}}.
+#'
+#' @param fit A \code{tvvar_fit} object returned by
+#'   \code{\link{unpenalized_estimate}} or \code{\link{penalized_estimate}}.
+#' @param digits Integer; number of decimal digits for printed output (default = 3).
+#' @param print Logical; if \code{TRUE} (default), prints formatted tables
+#'   (using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
+#'   data frames invisibly.
+#'
+#' @details
+#' The output separates parameters into four logical groups:
+#' \itemize{
+#'   \item \strong{Scalars:} A, B, and factor persistence parameters (\eqn{\phi_r})
+#'   \item \strong{Phi\_f:} Factor loadings on VAR coefficients (subject to L1 penalty)
+#'   \item \strong{L\_vech:} Lower-triangular elements of the Cholesky factor defining \eqn{\Omega}
+#'   \item \strong{Phi\_c:} Constant (if applicable) and lag-specific VAR coefficients
+#' }
+#'
+#' If a valid covariance matrix \code{fit$vcov} is available, the function reports
+#' standard errors, z-values, and two-sided normal p-values.  
+#' Otherwise, these columns are shown but contain \code{NA}.
+#'
+#' The model information block displays key meta-information (method, dimensions,
+#' sample size) and standard information criteria (AIC, AICc, BIC).
+#'
+#' @return
+#' Invisibly returns a list with the following elements:
+#' \describe{
+#'   \item{\code{info}}{Data frame of model metadata and ICs.}
+#'   \item{\code{params}}{Full parameter table with estimate, SE, z, and p.}
+#'   \item{\code{blocks}}{Named list of parameter subsets: scalars, Phi\_f, L\_vech, Phi\_c.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Example with simulated 2x2 system
+#' data <- simdata$Y
+#' fit_ml <- unpenalized_estimate(data, p = 1, r = 1, zero.mean = TRUE,
+#'                                phi_f_structure = matrix(1, 2, 2), method = "ML")
+#'
+#' # Print formatted summary
+#' tvvar_summary(fit_ml)
+#'
+#' # Retrieve underlying tables
+#' s <- tvvar_summary(fit_ml, print = FALSE)
+#' head(s$params)
+#' }
+#'
+#' @export
+tvvar_summary <- function(fit, digits = 3, print = TRUE) {
+  stopifnot(is.list(fit), !is.null(fit$meta))
+  
+  # parameter vector and vcov (works for ML/EM; penalized may be NA)
+  theta <- fit$theta %||% fit$optim$par
+  V     <- fit$vcov
+  if (is.list(V) && !is.null(V$untransformed)) V <- V$untransformed
+  
+  # build names & indices
+  map  <- .tvvar_param_index(fit)
+  npar <- length(map$names)
+  if (!length(theta) || length(theta) != npar) {
+    # fallback: try to pad/truncate; keep names aligned
+    theta <- theta[seq_len(min(length(theta), npar))]
+    if (length(theta) < npar) theta <- c(theta, rep(NA_real_, npar - length(theta)))
+  }
+  
+  # compute SE/z/p if vcov is available and sized
+  have_V <- is.matrix(V) && all(dim(V) == c(length(theta), length(theta)))
+  se  <- if (have_V) sqrt(pmax(diag(V), 0)) else rep(NA_real_, length(theta))
+  z   <- if (have_V) theta / se else rep(NA_real_, length(theta))
+  p   <- if (have_V) 2 * stats::pnorm(-abs(z)) else rep(NA_real_, length(theta))
+  
+  # tidy param table
+  params_df <- data.frame(
+    parameter = map$names,
+    estimate  = theta,
+    std.error = se,
+    z.value   = z,
+    p.value   = p,
+    stringsAsFactors = FALSE
+  )
+  
+  # split blocks for convenience
+  idx <- map$idx
+  blocks <- list(
+    scalars = params_df[idx$head, , drop = FALSE],
+    Phi_f   = if (length(idx$phi_f)) params_df[idx$phi_f, , drop = FALSE] else NULL,
+    L_vech  = if (length(idx$L))     params_df[idx$L, , drop = FALSE] else NULL,
+    Phi_c   = if (length(idx$phi_c)) params_df[idx$phi_c, , drop = FALSE] else NULL
+  )
+  
+  # ICs + runtime
+  ic <- fit$ic %||% list()
+  meta <- fit$meta %||% list()
+  info_df <- data.frame(
+    metric = c("Method","N","p","r","zero.mean","nobs","AIC","AICc","BIC","Runtime_sec"),
+    value  = c(meta$method %||% NA, meta$N %||% NA, meta$p %||% NA, meta$r %||% NA,
+               meta$zero.mean %||% NA, meta$nobs %||% NA,
+               ic$AIC %||% NA, ic$AICc %||% NA, ic$BIC %||% NA, meta$time %||% NA),
+    row.names = NULL
+  )
+  
+  # pretty print (if knitr available)
+  if (isTRUE(print)) {
+    if (requireNamespace("knitr", quietly = TRUE)) {
+      cat("## Model info\n")
+      print(knitr::kable(info_df, digits = digits, align = "l"))
+      cat("\n## Scalars (A, B, phi_r)\n")
+      print(knitr::kable(blocks$scalars, digits = digits))
+      if (!is.null(blocks$Phi_c)) {
+        cat("\n## Phi_c coefficients\n")
+        print(knitr::kable(blocks$Phi_c, digits = digits))
+      }
+      if (!is.null(blocks$Phi_f)) {
+        cat("\n## Phi_f (factor loadings on regressors)\n")
+        print(knitr::kable(blocks$Phi_f, digits = digits))
+      }
+      if (!is.null(blocks$L_vech)) {
+        cat("\n## vech(L) (Cholesky factor parameters for Omega)\n")
+        print(knitr::kable(blocks$L_vech, digits = digits))
+      }
+    } else {
+      message("knitr not found; printing with base::print()")
+      print(info_df)
+      print(blocks$scalars)
+      if (!is.null(blocks$Phi_c)) print(blocks$Phi_c)
+      if (!is.null(blocks$Phi_f)) print(blocks$Phi_f)
+      if (!is.null(blocks$L_vech)) print(blocks$L_vech)
+    }
+  }
+  
+  invisible(list(info = info_df, params = params_df, blocks = blocks))
+}
+
+
+
+
 initialize_omega <- function(N, diag_val = 0.3, offdiag_val = 0.2) {
   M <- matrix(offdiag_val, N, N)
   diag(M) <- diag_val
   M
 }
 
-
-
-initialize_parameters <- function(VAR.data, Phi.f.array.mat.structure, cfg){
-  print('[Initializing parameters..]')
-  
-  # Unpack config values
-  dim.VAR = cfg$dim.VAR
-  lag.order = cfg$lag.order
-  number.factors = cfg$number.factors
-  zero.mean = cfg$zero.mean
-  colnames(VAR.data) <- paste0("y", 1:ncol(VAR.data))
-  
-  # For simulation, initialize as true values to support optimization.
-  if(number.factors == 1){
-    p1 = c(0.3, 0.6, 0.95)}
-  else{
-    p1 = c(0.3, 0.6, diag(0.95))
+# Ensures the phi_f_structure has the correct 3D shape [N x N x r]
+.normalize_phi_structure <- function(phi_f_structure, N, r) {
+  # Case 1: NULL or scalar — default to ones
+  if (is.null(phi_f_structure)) {
+    return(array(1, dim = c(N, N, r)))
   }
   
-  omega <- matrix(0.2, nrow = dim.VAR, ncol = dim.VAR)
-  diag(omega) <- 0.3
-  start.H <- omega
-  print(start.H)
-
-  
-  B.t <- matrix(0, nrow=dim.VAR, ncol=(dim.VAR*lag.order+1))
-  for(j in 1:dim.VAR){
-    B.t[j,] = coefficients(VAR(VAR.data, p=lag.order))[[j]][,1]
-  }
-  A.t <- B.t[,-(dim.VAR*lag.order+1)]
-  
-  if(zero.mean==FALSE){
-    A.t <- cbind(B.t[,(dim.VAR*lag.order+1)], A.t)
-  }
-  Phi.c.ini = A.t
-  
-  if(zero.mean==TRUE){
-    Phi.f.ini = Phi.f.array.mat.structure[,-1]
-  }
-  else{
-    Phi.f.ini = Phi.f.array.mat.structure
+  # Case 2: matrix input (common case, e.g., matrix(1, 2, 2))
+  if (is.matrix(phi_f_structure)) {
+    # replicate the same matrix across r slices
+    return(array(phi_f_structure, dim = c(N, N, r)))
   }
   
-  # Transform for numerical stability
-  if(number.factors>0){
-    params1 = 
-      c(log(p1[1]/(1-p1[1])),
-        log(p1[2]/(1-p1[2])),
-        atanh(p1[3:(3+number.factors-1)]), 
-        Phi.f.array.mat.structure[which(Phi.f.array.mat.structure !=0)]*0.01, 
-        vech(start.H),
-        as.vector(Phi.c.ini)
-      )
-  } else if(number.factors==0){
-    params1 = 
-      c(log(p1[1]/(1-p1[1])),
-        log(p1[2]/(1-p1[2])),
-        Phi.f.array.mat.structure[which(Phi.f.array.mat.structure !=0)]*0.01, 
-        vech(start.H),
-        as.vector(Phi.c.ini)
-      )}
+  # Case 3: already a 3D array
+  if (length(dim(phi_f_structure)) == 3L) {
+    dims <- dim(phi_f_structure)
+    if (!all(dims[1:2] == N))
+      stop(sprintf("phi_f_structure must have dims [%d,%d,*], got [%d,%d,%d]",
+                   N, N, dims[1], dims[2], dims[3]))
+    if (dims[3] != r)
+      stop(sprintf("phi_f_structure has %d factors but r=%d.", dims[3], r))
+    return(phi_f_structure)
+  }
   
-  print('[Parameters initialized]')
-  return(params1)
+  # Case 4: list of matrices
+  if (is.list(phi_f_structure)) {
+    if (length(phi_f_structure) != r)
+      stop("If phi_f_structure is a list, it must have length r.")
+    arr <- array(NA, dim = c(N, N, r))
+    for (i in seq_len(r)) arr[,,i] <- phi_f_structure[[i]]
+    return(arr)
+  }
   
+  stop("Invalid phi_f_structure: must be matrix, 3D array, list of matrices, or NULL.")
 }
+
+initialize_parameters <- function(VAR.data,
+                                  p,
+                                  r,
+                                  zero.mean = TRUE,
+                                  phi_f_structure,
+                                  init = c("default", "random", "custom"),
+                                  init_list = NULL) {
+  init <- match.arg(init)
+  VAR.data <- as.matrix(VAR.data)
+  N  <- ncol(VAR.data)
+  
+  # --- Build Φ_f structure and mask ---
+  phi_arr      <- .normalize_phi_structure(phi_f_structure, N, r)
+  Phi.f.array  <- make.Phi.f(structure = phi_arr, lag.order = p)   # N x (N*p+1) x r
+  Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)                     # N x ((N*p+1)*r)
+  Phi.f.mask   <- (Phi.f.as.mat != 0)
+  n_phi_free   <- sum(Phi.f.mask)
+  
+  # --- Baseline defaults ---
+  A0     <- 0.10
+  B0     <- 0.80
+  phi_r0 <- if (r > 0) rep(0.95, r) else numeric(0L)
+  Omega0 <- matrix(0.2, N, N); diag(Omega0) <- 0.3   # 0.3 diag / 0.2 off-diag
+  
+  # Φ_c via static VAR (as before)
+  Y_named <- as.data.frame(VAR.data); colnames(Y_named) <- paste0("y", seq_len(N))
+  B.t <- matrix(0, nrow = N, ncol = (N * p + 1))
+  for (j in 1:N) B.t[j, ] <- coefficients(VAR(Y_named, p = p))[[j]][, 1]
+  A.t <- B.t[, -(N * p + 1), drop = FALSE]                 # drop intercept
+  if (isFALSE(zero.mean)) A.t <- cbind(B.t[, (N * p + 1), drop = FALSE], A.t)
+  Phi_c0 <- A.t
+  
+  # --- Init modes ---
+  if (init == "random") {
+    set.seed(123)
+    # A, B, phi_r
+    A0     <- runif(1, 0.05, 0.15)
+    B0     <- runif(1, 0.75, 0.85)
+    phi_r0 <- if (r > 0) runif(r, 0.90, 0.99) else numeric(0L)
+    # Ω
+    Omega0 <- diag(runif(N, 0.08, 0.15))
+    # Φ_c small noise
+    Phi_c0 <- Phi_c0 + 0.01 * matrix(rnorm(length(Phi_c0)), nrow = nrow(Phi_c0))
+  } else if (init == "custom") {
+    if (!is.null(init_list)) {
+      if (!is.null(init_list$A))     A0     <- init_list$A
+      if (!is.null(init_list$B))     B0     <- init_list$B
+      if (!is.null(init_list$phi_r)) phi_r0 <- init_list$phi_r
+      if (!is.null(init_list$Omega)) Omega0 <- init_list$Omega
+      if (!is.null(init_list$Phi_c)) Phi_c0 <- init_list$Phi_c
+      if (!is.null(init_list$Phi_f)) {
+        stopifnot(all(dim(init_list$Phi_f) == dim(Phi.f.array)))
+        Phi.f.array  <- init_list$Phi_f
+        Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)
+        Phi.f.mask   <- (Phi.f.as.mat != 0)
+        n_phi_free   <- sum(Phi.f.mask)
+      }
+    }
+  }
+  # Φ_f free entries start values
+  Phi_f_start <- numeric(n_phi_free)
+  if (n_phi_free > 0) {
+    if (init == "random") {
+      # small random starts for free Φ_f entries
+      Phi_f_start <- rnorm(n_phi_free, mean = 0, sd = 0.05)
+    } else if (init == "custom" && !is.null(init_list) && !is.null(init_list$Phi_f)) {
+      Phi_f_start <- Phi.f.as.mat[Phi.f.mask]   # from provided Φ_f
+    } else {
+      Phi_f_start[] <- 0.01                     # default small positive
+    }
+  }
+  
+  # pack (A,B,phi_r) transformed; Φ_f free; vech(Ω); vec(Φ_c)
+  logit <- function(x) log(x/(1 - x))
+  head_vec <- if (r > 0) c(logit(A0), logit(B0), atanh(phi_r0)) else c(logit(A0), logit(B0))
+  par_init <- c(head_vec, Phi_f_start, vech(Omega0), as.vector(Phi_c0))
+  
+  list(
+    par_init   = par_init,
+    Phi.f.array = Phi.f.array,
+    Phi.f.array.mat.structure = Phi.f.as.mat,
+    Phi_c0     = Phi_c0,
+    Omega0     = Omega0,
+    A0 = A0, B0 = B0, phi_r0 = phi_r0,
+    n_phi_free = n_phi_free,
+    Phi_f_mask = Phi.f.mask
+  )
+}
+
 
 
 calc_indices_of_lambda_diagonals <- function(dim.VAR, lag.order, number.factors){
@@ -401,7 +707,6 @@ optim_Phi_f_full_likelihood <- function(opti.eval.em, params, data, Phi.f.array,
   
   # Regular LASSO
   if(type == 'regular'){
-    print('regular!')
     opts <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3)
     prox_grad_result <- apg::apg(grad_for_apg, apg::prox.l1, length(Phi.f.init), opts)
     phi_est_penalized <- prox_grad_result$x
@@ -409,7 +714,6 @@ optim_Phi_f_full_likelihood <- function(opti.eval.em, params, data, Phi.f.array,
   
   # Adaptive LASSO
   if(type == 'adaptive'){
-    print('adaptive!')
     step_size <- 0.1 
     opts_weighted <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3, weights = weights, FIXED_STEP_SIZE = TRUE, STEP_SIZE = step_size)
     prox_grad_result_weighted <- apg::apg(grad_for_apg, prox_l1_weighted, length(Phi.f.init), opts_weighted)
