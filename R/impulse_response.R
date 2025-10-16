@@ -127,6 +127,7 @@ irf_penalized <- function(fit,
 #' @param shock_index index of unit shock (1..N)
 #' @param seed RNG seed base
 #' @return list(IRF_lb, IRF_med, IRF_ub)
+#' @importFrom MASS mvrnorm
 #' @export
 irf <- function(fit,
                 lags = 10,
@@ -169,7 +170,7 @@ irf <- function(fit,
       index=s.h*t
       set.seed(index)
 
-      par_val = mvrnorm(n = 1, mu = theta, Sigma = V)
+      par_val = MASS::mvrnorm(n = 1, mu = theta, Sigma = V)
       
       #### obtain Phi,psi,aT,PT,HT evaluated at parameter value par_val  
       opti.eval <- opti.fct(

@@ -8,19 +8,19 @@ library(dplyr)
 library(MASS)
 
 
-setwd("C:/Users/Julia/Dropbox/tvvar/R/publishable_code")
+#setwd("C:/Users/Julia/Dropbox/tvvar/R/publishable_code")
 
 
 
-load("model_output.RData")   # final model from Gorgi et al (2024)
+load("/Users/gijssmeets/Documents/2. werk/3. vu/tvvar/R/publishable_code/model_output.RData")   # final model from Gorgi et al (2024)
 
 
 ## call c++ function script
-sourceCpp("tvvar_cpp_functions5.cpp")
-sourceCpp("lyapunov_cond.cpp")
-sourceCpp("irf_generator.cpp")
+sourceCpp('/Users/gijssmeets/Documents/2. werk/3. vu/tvvar/R/publishable_code/tvvar_cpp_functions5.cpp')
+sourceCpp('/Users/gijssmeets/Documents/2. werk/3. vu/tvvar/R/publishable_code/lyapunov_cond.cpp')
+sourceCpp('/Users/gijssmeets/Documents/2. werk/3. vu/tvvar/R/publishable_code/irf_generator.cpp')
 
-source("tvvar_r_functions.r")
+source('/Users/gijssmeets/Documents/2. werk/3. vu/tvvar/R/publishable_code/tvvar_r_functions.R')
 
 
 #source("irf_functions_cpp.r")  ## R code that produces the same output, just slower
@@ -80,6 +80,7 @@ for(i in 1:B){
   Phi_c_noint <- Phi_c_est[,-1]
   Phi_f_noint <- array(Phi_f_est, dim=c(dim.VAR, (dim.VAR*lag.order+1), r))[,-1,]
   seed_ly = 12
+  
   lyapunov[i] = check_lyapunov(Phi_c_noint, Phi_f_noint, phi_est_tr, seed_ly)
   
   Phi = array(cbind(Phi_c_est, Phi_f_est), c(dim.VAR,dim.VAR*lag.order+1, (number.factors+1)))

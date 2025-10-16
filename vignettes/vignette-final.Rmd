@@ -1,0 +1,177 @@
+---
+title: "tvvar: Sparse Estimation of Time-Varying VAR Models"
+output: rmarkdown::html_vignette
+bibliography: REFERENCES.bib
+vignette: >
+  %\VignetteIndexEntry{tvvar: Sparse Estimation of Time-Varying VAR Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Installation
+
+The package can be installed with
+
+```{r, eval=FALSE}
+install.packages("tvvar")
+```
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(tvvar)
+set.seed(1)
+```
+
+Make sure to also install `apg`, the package for `accelerated proximal gradient descent` from https://github.com/jpvert/apg:
+
+```{r, eval=FALSE}
+install_github("jpvert/apg", force=TRUE)
+```
+
+## Background
+
+This package builds on dynamic factor VAR models with conditional heteroskedastic errors [@gorgi2019dfvar]. 
+
+[TODO]: Elaborate and refer to own paper
+
+## Quick start
+An example of a simulated dataset with `N` = 2, `r` = `p` = 1, with which can be called by:
+
+```{r}
+data(simdata, package = "tvvar")  
+str(simdata$Y[1:5, ])
+```
+
+gives a list with the following components: 
+- `Y`: a T × N matrix containing the observed time series data.\
+- `factors`: a T × r matrix of the latent factor time series.\
+- `shocks`: a T × N matrix of the VAR shocks (innovations).
+
+We run the unpenalized estimation using ML on the simulated dataset and retrieve the estimated parameters and log-likelihood:
+
+```{r, message=FALSE, warning=FALSE}
+fit_ml <- unpenalized_estimate(
+  data             = simdata$Y,
+  p                = 1,
+  r                = 1,
+  zero.mean        = TRUE,
+  phi_f_structure  = matrix(1, 2, 2),
+  method           = "ML",
+  init             = "default")
+```
+
+[TODO]: Make summary more compact
+
+And run a summary.......
+
+```{r}
+tvvar_summary(fit_ml)
+```
+
+## Unpenalized estimation
+The function `unpenalized_estimate()` lets the user specifies the data as input, given as a T x N matrix. The `unpenalized_estimate()` function returns a `S3` class object `tvvar` which contains the estimated parameters and scores on fit of the model. The function takes the following arguments:
+
+```{r, echo = TRUE, eval = FALSE}
+unpenalized_estimate(
+  data,                       
+  p = 1,                      
+  r = 1,                      
+  zero.mean = TRUE,           
+  phi_f_structure,            
+  method = c("ML","EM"),    
+  control    = list(maxit = 2000, trace = 0),           
+  em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE), 
+  init = c("default","random","custom"),              
+  init_list = NULL                                     
+)
+```
+
+### Data
+A **T × N** numeric matrix containing the observed time series data.  
+Each column corresponds to a variable, and each row to a time observation.  
+The function assumes the data are ordered chronologically (oldest to newest).
+
+### Lag order `p`
+Integer specifying the **lag order** of the VAR component.  
+This determines how many past observations enter the autoregressive structure.
+
+### Number of factors `r`
+Integer specifying the **number of latent factors** driving the time variation in coefficients.  
+Typically small (e.g., 1–3) relative to the number of observed variables.
+
+### Intercept `zero.mean`
+Logical; if `TRUE`, the intercept is fixed at zero and the data should be **demeaned** beforehand.  
+If `FALSE`, an intercept is estimated in the constant block `Φ_c`.
+
+### Factor loadings structure `phi_f_structure` 
+Specifies which elements of `Φ_f` (the factor loadings) are free or fixed to zero.  
+Can be provided as:
+- a 3D array `[N, N, r]`,  
+- a list of `r` `N × N` matrices, or  
+- a block matrix of size `N × (N * r)`.  
+Entries set to zero are treated as fixed.
+
+### Optimization method `method`
+Character; either `"ML"` for **maximum likelihood estimation**  
+(using numerical optimization) or `"EM"` for the **expectation–maximization algorithm**.  
+Both methods estimate the same parameters, but `EM` can be more stable for latent-factor models.
+
+### Control settings for ML `control`
+List of optimizer settings for `"ML"` estimation, e.g.  
+`list(maxit = 2000, trace = 0)`.  
+These are passed directly to `optim()`.
+
+### Control settings for EM `em_control`
+List of settings for `"EM"` estimation, e.g.  
+`list(max_iter = 200, tol = 1e-3, trace = TRUE)`.  
+Controls the maximum number of EM iterations, tolerance, and verbosity.
+
+### Initialization type `init`
+Initialization mode for the parameter vector.  
+Accepts `"default"`, `"random"`, or `"custom"`:
+- `"default"` — deterministic starting values based on simple OLS or heuristics.  
+- `"random"` — random but stationary initialization (useful for robustness checks).  
+- `"custom"` — user-specified starting values via `init_list`.
+
+### Initialization values `init_list`
+Optional **named list** supplying custom starting values.  
+The user can override any subset of:
+`A`, `B`, `phi_r`, `Omega`, `Phi_c`, or `Phi_f`.  
+Entries not provided are filled with defaults.  
+Note that `Phi_f` should include only the **free entries** (those set to 1 in `phi_f_structure`).
+
+
+### Sparse data set
+In many macro applications, only a few VAR coefficients truly vary over time. We demonstrate how penalization improves fit and structure recovery when the true factor-loadings block \( \Phi_f \) is **sparse**. Using `simulate_tvvar_data()`, 
+
+```{r}
+N <- 2; p <- 2; r <- 2
+Phi.f <- matrix(0, nrow = N, ncol = N * p * r)
+Phi.f[1, 1] <-  0.25  
+Phi.f[2, 4] <- -0.20  
+Phi.f[1, 7] <-  0.15  
+
+sim_sparse <- simulate_tvvar_data(
+  T = 1000, N = N, p = p, r = r,
+  A2 = 0.1, B2 = 0.75,
+  pphi = rep(0.95, r),
+  omega = matrix(c(0.30, 0.20, 0.20, 0.30), N, N, byrow = TRUE),
+  Phi.c = matrix(c(
+  0.30,  0.10,   0.00,  0.10,  
+  0.00,  0.25,   0.10,  0.00
+  ), nrow = N, byrow = TRUE),
+  Phi.f = Phi.f
+)
+```
+
+## Real data example
+We also have the real dataset of US macroeconomics, which can be loaded by:
+
+```{r, eval=TRUE, echo=TRUE}
+data(macro_data)
+str(macro_data[1:5, ])
+```
+
+This dataset contains 5 variables: date, unemployment rate, inflation rate and federal funds rate, from 1960 to 2022 (T = 747). The data is quarterly and seasonally adjusted. The data is stored in a T x N matrix where each column corresponds to a variable.
+
+[TODO]: Apply unpen/pen.

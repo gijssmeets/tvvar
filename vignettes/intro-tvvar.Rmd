@@ -27,6 +27,39 @@ set.seed(1)
 ```
 
 'Quick intro to the theory'
+	•	2–3 bullets: TV-VAR with factor-driven time variation; BEKK-type volatility; role of \Phi_c (static) and \Phi_f (time-varying loadings).
+	•	Note: stability requirement and Lyapunov check (we’ll use it later).
+	
+
+## Quick start
+Quick start (5 lines)
+	•	Load included simulated data simdata$Y (N=2, p=1, r=1).
+	•	Fit unpenalized ML in one line.
+	•	Print a compact summary (tvvar_summary(fit)).
+	•	Plot a quick IRF for one time point (plot_irf(irf_ml, t=..., j=...)).
+
+
+## Unpenalized estimation
+
+### Data & arguments
+	•	Explain unpenalized_estimate(data, p, r, zero.mean, phi_f_structure, method, init, ...).
+	•	Mention init choices: "default", "random", "custom" (what each sets).
+
+### Fit via ML
+	•	Run ML; show fit_ml\$estimate, fit_ml\$lik, fit_ml\$ic.
+	•	Optional: runtime from fit_ml\$meta\$time.
+
+### Fit via EM (unpenalized)
+	•	Run EM with a couple of control settings.
+	•	Compare lik/ic versus ML; note when EM is useful.
+
+## Penalized estimation
+
+### Data & arguments
+	•	Show the sparse pattern (2–3 nonzeros in $\Phi_f$); quick schematic/heatmap.
+	•	Simulate data (or load a prepared dataset).
+
+
 
 ## Data
 
