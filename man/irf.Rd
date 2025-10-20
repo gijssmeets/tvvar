@@ -2,30 +2,35 @@
 % Please edit documentation in R/impulse_response.R
 \name{irf}
 \alias{irf}
-\title{Time-varying impulse responses (unified: ML & penalized)}
+\title{Time-varying impulse responses (bands via MC)}
 \usage{
-irf(fit, lags = 10, T.max = 5, B = 500, shock_vars = 1L, seed = 1234)
+irf(
+  fit,
+  lags = 10,
+  T.max = 5,
+  B = 500,
+  shock_index = 1,
+  shock_position = c(0, 1)
+)
 }
 \arguments{
-\item{fit}{tvvar_fit from \code{unpenalized_estimate()} or \code{penalized_estimate()}.}
+\item{fit}{tvvar_fit}
 
-\item{lags}{integer horizon (number of periods ahead).}
+\item{lags}{horizon}
 
-\item{T.max}{integer: how many time indices (from start) to evaluate.}
+\item{T.max}{number of time points (from start)}
 
-\item{B}{integer: Monte Carlo draws. For ML this is param draws; for penalized this is factor-path draws.}
+\item{B}{number of Monte Carlo draws}
 
-\item{shock_vars}{integer vector of series to shock (1-based). Each shock is run separately.}
+\item{shock_index}{index of unit shock (1..N)}
 
-\item{seed}{integer base RNG seed.}
+\item{shock_position}{numeric length-N shock vector (used by your original code)}
 }
 \value{
-a named list of IRF objects (one per shocked series), each with
-\code{IRF_lb}, \code{IRF_med}, \code{IRF_ub} (arrays N x lags x T.max),
-and \code{meta}.
+list(IRF_lb, IRF_med, IRF_ub)
 }
 \description{
-Computes IRFs for one or multiple one-unit shocks. If \code{fit$meta$method == "ML"},
-parameters are drawn from the asymptotic covariance; otherwise (penalized)
-coefficients are held fixed and only factor paths are simulated.
+Works for both unpenalized ML fits and penalized fits.
+For ML: identical to your original implementation.
+For penalized: factors are simulated, static coefficients fixed.
 }
