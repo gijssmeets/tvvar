@@ -158,7 +158,7 @@
 #' )
 #' }
 unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
-                                 phi_f_structure,
+                                 phi_f_structure = NULL,
                                  method = c("ML","EM"),
                                  control = list(maxit = 2000, trace = 0),
                                  em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE),
@@ -166,6 +166,12 @@ unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
                                  init_list = NULL) {
   method <- match.arg(method)
   init <- match.arg(init)
+  
+  
+  if (is.null(phi_f_structure)) {
+    phi_f_structure <- matrix(1, nrow = dim(data), ncol = dim(data))
+    #TODO: Zero-mean = FALSE option
+  }
   
   ss <- .tvvar_shared_setup(data, p, r, zero.mean, phi_f_structure)
   initvals <- .tvvar_build_par_init(ss$Y, p, r, zero.mean, ss$Phi.f.array, init, init_list)

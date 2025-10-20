@@ -157,6 +157,16 @@
 #' }
 #'
 #' @export
+#' Compact summary for tvvar fits (with natural-scale scalars)
+#'
+#' Prints a tidy table of parameter estimates and standard errors.
+#' Scalars A, B, and phi_r are shown on the (0,1) scale with delta-method SEs.
+#'
+#' @param fit tvvar_fit object (from unpenalized_estimate()/penalized_estimate()).
+#' @param digits number of digits to print.
+#' @param print logical; if TRUE, print nicely (uses knitr::kable when available).
+#' @return (invisibly) a list with info, params, and block tables.
+#' @export
 tvvar_summary <- function(fit, digits = 3, print = TRUE) {
   stopifnot(is.list(fit), !is.null(fit$meta))
   
@@ -168,30 +178,49 @@ tvvar_summary <- function(fit, digits = 3, print = TRUE) {
   # build names & indices
   map  <- .tvvar_param_index(fit)
   npar <- length(map$names)
+  
+  # pad/truncate theta if needed
   if (!length(theta) || length(theta) != npar) {
-    # fallback: try to pad/truncate; keep names aligned
     theta <- theta[seq_len(min(length(theta), npar))]
     if (length(theta) < npar) theta <- c(theta, rep(NA_real_, npar - length(theta)))
   }
   
-  # compute SE/z/p if vcov is available and sized
+  # SE on unconstrained scale (if available)
   have_V <- is.matrix(V) && all(dim(V) == c(length(theta), length(theta)))
-  se  <- if (have_V) sqrt(pmax(diag(V), 0)) else rep(NA_real_, length(theta))
-  z   <- if (have_V) theta / se else rep(NA_real_, length(theta))
-  p   <- if (have_V) 2 * stats::pnorm(-abs(z)) else rep(NA_real_, length(theta))
+  se_raw <- if (have_V) sqrt(pmax(diag(V), 0)) else rep(NA_real_, length(theta))
   
-  # tidy param table
+  # Start from raw (unconstrained) and create "natural" copies for scalars
+  est_nat <- theta
+  se_nat  <- se_raw
+  
+  # Transform head scalars (A, B, phi_r) to (0,1) with delta-method SEs
+  idx <- map$idx
+  if (length(idx$head)) {
+    inv_logit <- stats::plogis
+    h <- idx$head
+    p <- inv_logit(theta[h])          # natural-scale values
+    est_nat[h] <- p
+    if (have_V) {
+      grad <- p * (1 - p)             # derivative of plogis
+      se_nat[h] <- se_raw[h] * grad
+    }
+  }
+  
+  # z/p-values (use transformed SEs and estimates where applicable)
+  z   <- if (all(!is.na(se_nat))) est_nat / se_nat else rep(NA_real_, length(theta))
+  pvl <- if (all(!is.na(z))) 2 * stats::pnorm(-abs(z)) else rep(NA_real_, length(theta))
+  
+  # tidy param table (report "estimate" as: natural for head, raw for others)
   params_df <- data.frame(
     parameter = map$names,
-    estimate  = theta,
-    std.error = se,
+    estimate  = est_nat,
+    std.error = se_nat,
     z.value   = z,
-    p.value   = p,
+    p.value   = pvl,
     stringsAsFactors = FALSE
   )
   
   # split blocks for convenience
-  idx <- map$idx
   blocks <- list(
     scalars = params_df[idx$head, , drop = FALSE],
     Phi_f   = if (length(idx$phi_f)) params_df[idx$phi_f, , drop = FALSE] else NULL,
@@ -210,12 +239,11 @@ tvvar_summary <- function(fit, digits = 3, print = TRUE) {
     row.names = NULL
   )
   
-  # pretty print (if knitr available)
   if (isTRUE(print)) {
     if (requireNamespace("knitr", quietly = TRUE)) {
       cat("## Model info\n")
       print(knitr::kable(info_df, digits = digits, align = "l"))
-      cat("\n## Scalars (A, B, phi_r)\n")
+      cat("\n## Scalars (A, B, phi_r) on (0,1) scale\n")
       print(knitr::kable(blocks$scalars, digits = digits))
       if (!is.null(blocks$Phi_c)) {
         cat("\n## Phi_c coefficients\n")

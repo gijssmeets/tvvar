@@ -80,6 +80,12 @@ penalized_estimate <- function(data,
     w.Phi.f <- 1
   }
   
+  # do not penalize the diagonals of Lambda for identification purposes (see theory thesis)
+  diag_idx <- calc_indices_of_lambda_diagonals(N, p, r)
+  idx <- diag_idx$without_zeros
+  idx <- idx[idx >= 1 & idx <= length(w.Phi.f)]
+  w.Phi.f[idx] <- 0
+  
   ## ---- run penalized ECM (your routine) ----
   fit_pen <- em_algorithm(
     params      = params0,
@@ -99,7 +105,7 @@ penalized_estimate <- function(data,
     VAR.data    = Y,
     Phi.f.array = Phi.f.array,
     cfg         = cfg,
-    Smooth      = FALSE,
+    Smooth      = TRUE,
     purpose     = "eval"
   )
   

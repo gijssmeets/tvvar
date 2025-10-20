@@ -83,7 +83,8 @@ simulate_tvvar_data <- function(T = 200, N = 2, p = 1, r = 1,
     } else {
       innov <- MASS::mvrnorm(1, mu = rep(0, r), Sigma = eta)
     }
-    factors[i, ] <- (phi_mat %*% factors[i - 1, , drop = FALSE]) + innov
+
+    factors[i, ] <- (phi_mat %*% factors[i - 1,]) + innov
     
     ## time-varying coefficient: Phi_t = Phi_c + sum_k Phi_f^{(k)} * f_{t,k}
     Phi_t <- Phi.c

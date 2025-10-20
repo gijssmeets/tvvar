@@ -229,7 +229,8 @@ as.list(result)
 
 
 
-
+#' @noRd
+#' @keywords internal
 hessian.fct.tr <- function(params, VAR.data, Phi.f.array, zero.mean, cfg){
   number.factors <- cfg$number.factors
   dim.VAR <- cfg$dim.VAR
@@ -298,7 +299,8 @@ hessian.fct.tr <- function(params, VAR.data, Phi.f.array, zero.mean, cfg){
   
 }
 
-
+#' @noRd
+#' @keywords internal
 hessian.fct.untr <- function(params, VAR.data, Phi.f.array, zero.mean, cfg){
   
 
