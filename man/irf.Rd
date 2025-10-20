@@ -2,36 +2,30 @@
 % Please edit documentation in R/impulse_response.R
 \name{irf}
 \alias{irf}
-\title{Time-varying impulse responses (basic MC bands)}
+\title{Time-varying impulse responses (unified: ML & penalized)}
 \usage{
-irf(
-  fit,
-  lags = 10,
-  T.max = 5,
-  B = 500,
-  shock_index = 1,
-  shock_position = c(0, 1)
-)
+irf(fit, lags = 10, T.max = 5, B = 500, shock_vars = 1L, seed = 1234)
 }
 \arguments{
-\item{fit}{tvvar_fit from unpenalized_estimate(..., method = "ML")}
+\item{fit}{tvvar_fit from \code{unpenalized_estimate()} or \code{penalized_estimate()}.}
 
-\item{lags}{horizon}
+\item{lags}{integer horizon (number of periods ahead).}
 
-\item{T.max}{number of time points (from start) to compute}
+\item{T.max}{integer: how many time indices (from start) to evaluate.}
 
-\item{B}{number of Monte Carlo draws (set B=0 or 1 for plug-in only)}
+\item{B}{integer: Monte Carlo draws. For ML this is param draws; for penalized this is factor-path draws.}
 
-\item{shock_index}{index of unit shock (1..N)}
+\item{shock_vars}{integer vector of series to shock (1-based). Each shock is run separately.}
 
-\item{seed}{RNG seed base}
+\item{seed}{integer base RNG seed.}
 }
 \value{
-list(IRF_lb, IRF_med, IRF_ub)
+a named list of IRF objects (one per shocked series), each with
+\code{IRF_lb}, \code{IRF_med}, \code{IRF_ub} (arrays N x lags x T.max),
+and \code{meta}.
 }
 \description{
-Minimal IRF generator that mirrors the provided script.
-Expects an unpenalized ML fit where \code{fit$theta$untransformed}
-and \code{fit$vcov$untransformed} exist. Falls back to \code{fit$optim$par}
-and a tiny diagonal covariance if missing.
+Computes IRFs for one or multiple one-unit shocks. If \code{fit$meta$method == "ML"},
+parameters are drawn from the asymptotic covariance; otherwise (penalized)
+coefficients are held fixed and only factor paths are simulated.
 }

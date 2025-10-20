@@ -9,7 +9,7 @@ unpenalized_estimate(
   p = 1,
   r = 1,
   zero.mean = TRUE,
-  phi_f_structure,
+  phi_f_structure = NULL,
   method = c("ML", "EM"),
   control = list(maxit = 2000, trace = 0),
   em_control = list(max_iter = 200, tol = 0.001, trace = TRUE),

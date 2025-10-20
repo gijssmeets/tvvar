@@ -7,14 +7,11 @@
 tvvar_summary(fit, digits = 3, print = TRUE)
 }
 \arguments{
-\item{fit}{A \code{tvvar_fit} object returned by
-\code{\link{unpenalized_estimate}} or \code{\link{penalized_estimate}}.}
+\item{fit}{tvvar_fit object (from unpenalized_estimate()/penalized_estimate()).}
 
-\item{digits}{Integer; number of decimal digits for printed output (default = 3).}
+\item{digits}{number of digits to print.}
 
-\item{print}{Logical; if \code{TRUE} (default), prints formatted tables
-(using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
-data frames invisibly.}
+\item{print}{logical; if TRUE, print nicely (uses knitr::kable when available).}
 }
 \value{
 Invisibly returns a list with the following elements:
@@ -23,6 +20,8 @@ Invisibly returns a list with the following elements:
 \item{\code{params}}{Full parameter table with estimate, SE, z, and p.}
 \item{\code{blocks}}{Named list of parameter subsets: scalars, Phi\_f, L\_vech, Phi\_c.}
 }
+
+(invisibly) a list with info, params, and block tables.
 }
 \description{
 Produces a formatted summary table for a fitted time-varying VAR model estimated
