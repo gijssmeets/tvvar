@@ -730,14 +730,17 @@ optim_Phi_f_full_likelihood <- function(opti.eval.em, params, data, Phi.f.array,
   
   # Regular LASSO
   if(type == 'regular'){
-    stop("penalized_estimate() is disabled in this lite build (no 'apg'). ",
-         "Install the full tvvar package to enable penalized estimation.")
+    opts <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3)
+    prox_grad_result <- apg::apg(grad_for_apg, apg::prox.l1, length(Phi.f.init), opts)
+    phi_est_penalized <- prox_grad_result$x
   }
   
   # Adaptive LASSO
   if(type == 'adaptive'){
-    stop("penalized_estimate() is disabled in this lite build (no 'apg'). ",
-         "Install the full tvvar package to enable penalized estimation.")
+    step_size <- 0.1 
+    opts_weighted <- list(X_INIT = Phi.f.init, lambda = lambda, MAX_ITERS = 100, EPS = 1e-3, weights = weights, FIXED_STEP_SIZE = TRUE, STEP_SIZE = step_size)
+    prox_grad_result_weighted <- apg::apg(grad_for_apg, prox_l1_weighted, length(Phi.f.init), opts_weighted)
+    phi_est_penalized <- prox_grad_result_weighted$x
   }
   
 
