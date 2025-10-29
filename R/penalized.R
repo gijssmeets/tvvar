@@ -161,7 +161,7 @@ penalized_estimate <- function(data,
                  nobs = T.fin, method = "ECM-penalized",
                  Phi.f.array = Phi.f.array,
                  lambda = lambda_penalty, weights = penalty_type,
-                 init = init, time = runtime_sec)
+                 init = init, time = runtime_sec, data = data)
   )
   class(out) <- "tvvar_fit"
   out
