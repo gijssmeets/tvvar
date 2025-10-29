@@ -1,164 +1,148 @@
-#' Multi-step forecasts for a tvfit (unpenalized ML)
+#' Time-varying VAR forecasting
 #'
-#' Simulates recursive forecasts y_{T+1}, …, y_{T+h} using parameter draws
-#' from the asymptotic normal N(theta, vcov) and simulated factor paths.
-#' Volatility is propagated with a simple BEKK(1,1) recursion using simulated shocks.
+#' Generates multi-step forecasts for a fitted tvvar model.
+#' For unpenalized (ML) fits, parameter uncertainty is included via draws from
+#' the asymptotic covariance. For penalized fits, parameters are fixed, and
+#' only factor and shock uncertainty is simulated.
 #'
-#' @param fit   tvfit from unpenalized_estimate(..., method = "ML")
-#' @param h     integer horizon (number of steps ahead)
-#' @param B     number of Monte Carlo paths (set B=1 for plug-in path)
-#' @param seed  optional integer seed (reproducibility)
-#' @param intervals numeric probs to report (default 16%, 50%, 84%)
-#' @param use_param_draws logical; if FALSE, uses plug-in theta only
-#'
-#' @return list with elements:
-#'   \item{mean, median, lb, ub}{N x h matrices of forecast stats}
-#'   \item{paths}{optional B x h x N array (only if B not too large)}
-#' @importFrom MASS mvrnorm
+#' @param fit Fitted tvvar object from `tvfit()` (unpenalized) or `tvpenfit()` (penalized)
+#' @param h Integer forecast horizon
+#' @param B Number of Monte Carlo forecast paths
+#' @param seed Optional random seed
+#' @param intervals Quantiles to report for prediction intervals
+#' @param use_param_draws Logical; ignored for penalized fits
+#' @return Object of class `tvpred` containing median, mean, lower/upper bounds, and meta info.
 #' @export
 tvpred <- function(fit,
-                           h = 8,
-                           B = 500,
-                           seed = NULL,
-                           intervals = c(0.16, 0.50, 0.84),
-                           use_param_draws = TRUE) {
+                   h = 8,
+                   B = 500,
+                   seed = NULL,
+                   intervals = c(0.16, 0.50, 0.84),
+                   use_param_draws = TRUE) {
   if (!is.null(seed)) set.seed(seed)
   
   N   <- fit$meta$N
   p   <- fit$meta$p
   r   <- fit$meta$r
-  zm  <- fit$meta$zero.mean
-  Phi.f.array <- fit$meta$Phi.f.array        # N x (N*p+1) x r (mask-built)
-  VAR.data    <- fit$meta$data
+  VAR.data <- fit$meta$data
   T.fin <- nrow(VAR.data)
   
-  # parameter center & covariance (as in your IRF)
-  theta <- fit$theta
-  V     <- fit$vcov
-  if (is.null(theta) || is.null(V)) {
-    # fallback (should not normally happen for ML)
-    theta <- fit$optim$par
-    V     <- diag(1e-6, length(theta))
+  is_penalized <- !identical(fit$meta$method, "ML")
+  
+  if (is_penalized) {
+    warning("Penalized forecast: parameter uncertainty ignored; only factor & shock variability simulated.")
+    Phi_c_est <- fit$estimate$Phi_c
+    Phi_f_est <- fit$estimate$Phi_f
+    psi       <- as.numeric(fit$estimate$phi_r)
+    ev        <- fit$eval
+  } else {
+    zm  <- fit$meta$zero.mean
+    Phi.f.array <- fit$meta$Phi.f.array
+    theta <- fit$theta
+    V     <- fit$vcov
+    if (is.null(theta) || is.null(V)) {
+      theta <- fit$optim$par
+      V     <- diag(1e-6, length(theta))
+    }
+    
+    # bookkeeping for free Phi_f entries
+    Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)
+    Phi.f.as.mat[Phi.f.as.mat != 0] <- 1
+    n_phi_free <- sum(Phi.f.as.mat != 0)
   }
   
-  # free-pattern bookkeeping (same as IRF)
-  Phi.f.as.mat <- matrix(Phi.f.array, nrow = N)
-  Phi.f.as.mat[Phi.f.as.mat != 0] <- 1
-  n_phi_free <- sum(Phi.f.as.mat != 0)
-  
-  # helper: slice theta into (A,B,phi_r, Phi_f_free, Lvech, Phi_c_vec)
   inv_logit <- stats::plogis
-  
-  # storage for forecast draws
   Ypaths <- array(NA_real_, dim = c(B, h, N))
   
-  # last p lags from the sample (stacked as y_{T}, y_{T-1}, ..., y_{T-p+1})
+  # last p lags
   y_hist <- VAR.data[(T.fin - p + 1):T.fin, , drop = FALSE]
-  # companion-state lag vector in order: [y_{t-1}^{(1..N)}, y_{t-2}^{(1..N)}, ...]
-  make_lagvec <- function(Ylag) as.numeric(t(Ylag[nrow(Ylag):(nrow(Ylag)-p+1), , drop=FALSE]))
-  y_lags0 <- make_lagvec(rbind(y_hist[nrow(y_hist), , drop=FALSE], y_hist[1:(p-1), , drop=FALSE]))
+  make_lagvec <- function(Ylag) as.numeric(t(Ylag[nrow(Ylag):(nrow(Ylag)-p+1), , drop = FALSE]))
+  y_lags0 <- make_lagvec(rbind(y_hist[nrow(y_hist), , drop = FALSE], y_hist[1:(p-1), , drop = FALSE]))
   
   for (b in seq_len(B)) {
-    # 1) draw parameters (or plug-in)
-    par_b <- if (use_param_draws) MASS::mvrnorm(1, mu = theta, Sigma = V) else theta
     
-    # 2) get evaluation pieces at (par_b)
-    ev <- opti.fct(
-      par_free    = par_b,
-      par_fixed   = NaN,
-      VAR.data    = VAR.data,
-      Phi.f.array = Phi.f.array,
-      cfg         = list(zero.mean = zm, dim.VAR = N, lag.order = p, number.factors = r),
-      Smooth      = FALSE,
-      purpose     = "eval"
-    )
-    Phi_c  <- ev$Phi.c                                # N x (1 + N*p)
-    aT     <- if (r > 0) ev$filtered.state[, ncol(ev$filtered.state), drop=TRUE] else numeric(0)
-    HT0    <- ev$array.filtered.H[, , ncol(ev$array.filtered.H)]
-    # Rebuild A,B scalars (first two are unconstrained, map to (0,1))
-    idx <- 1L
-    A2  <- inv_logit(par_b[idx]); idx <- idx + 1L
-    B2  <- inv_logit(par_b[idx]); idx <- idx + 1L
-    psi <- if (r > 0) inv_logit(par_b[idx:(idx + r - 1L)]) else numeric(0L)
-    idx <- idx + length(psi)
-    
-    # Phi_f free entries, rebuild Phi_f array (N x (N*p+1) x r)
-    Phi_f_est <- Phi.f.as.mat
-    if (n_phi_free > 0) {
-      Phi_f_est[Phi.f.as.mat != 0] <- par_b[idx:(idx + n_phi_free - 1L)]
+    if (!is_penalized) {
+      # === Unpenalized (ML) branch ===
+      par_b <- if (use_param_draws) MASS::mvrnorm(1, mu = theta, Sigma = V) else theta
+      
+      ev <- opti.fct(
+        par_free    = par_b,
+        par_fixed   = NaN,
+        VAR.data    = VAR.data,
+        Phi.f.array = Phi.f.array,
+        cfg         = list(zero.mean = zm, dim.VAR = N, lag.order = p, number.factors = r),
+        Smooth      = FALSE,
+        purpose     = "eval"
+      )
+      
+      Phi_c  <- ev$Phi.c
+      HT0    <- ev$array.filtered.H[, , ncol(ev$array.filtered.H)]
+      aT     <- if (r > 0) ev$filtered.state[, ncol(ev$filtered.state)] else numeric(0)
+      
+      # rebuild dynamic params
+      idx <- 1L
+      A2  <- inv_logit(par_b[idx]); idx <- idx + 1L
+      B2  <- inv_logit(par_b[idx]); idx <- idx + 1L
+      psi <- if (r > 0) inv_logit(par_b[idx:(idx + r - 1L)]) else numeric(0L)
+      idx <- idx + length(psi)
+      
+      Phi_f_est <- Phi.f.as.mat
+      if (n_phi_free > 0)
+        Phi_f_est[Phi.f.as.mat != 0] <- par_b[idx:(idx + n_phi_free - 1L)]
+      Phi_f_arr <- array(Phi_f_est, dim = dim(Phi.f.array))
+      
+      Omega_b <- drop((1 - A2 - B2)) * HT0
+      Phi_c_noint <- Phi_c[, -1, drop = FALSE]
+      Phi_f_noint <- if (r > 0) Phi_f_arr[, -1, , drop = FALSE] else array(0, dim = c(N, N*p, 0))
+      
+    } else {
+      # === Penalized branch ===
+      Phi_c_noint <- Phi_c_est[, -1, drop = FALSE]
+      Phi_f_noint <- Phi_f_est[, -1, , drop = FALSE]
+      HT0   <- ev$array.filtered.H[, , ncol(ev$array.filtered.H)]
+      aT    <- if (r > 0) ev$filtered.state[, ncol(ev$filtered.state)] else numeric(0)
+      A2 <- 0.2; B2 <- 0.75  # fixed scalar BEKK params (approx)
+      Omega_b <- drop((1 - A2 - B2)) * HT0
     }
-    idx <- idx + n_phi_free
-    Phi_f_arr <- array(Phi_f_est, dim = dim(Phi.f.array))   # includes intercept column; we’ll drop later
     
-    # BEKK omega (approx via unconditional relation using HT0)
-    # Unconditional: H ≈ omega / (1 - A2 - B2)  => omega ≈ (1 - A2 - B2) * H
-    Omega_b <- drop((1 - A2 - B2)) * HT0
-    
-    # Drop intercept column for VAR propagation
-    Phi_c_noint <- Phi_c[, -1, drop = FALSE]                  # N x (N*p)
-    Phi_f_noint <- if (r > 0) Phi_f_arr[, -1, , drop = FALSE] else array(0, dim=c(N, N*p, 0))
-    
-    # initialize factor state and H
-    f_t   <- if (r > 0) as.numeric(aT) else numeric(0)
-    H_t   <- HT0
+    # === Forecast recursion ===
+    f_t <- if (r > 0) as.numeric(aT) else numeric(0)
+    H_t <- HT0
     y_lag <- y_lags0
     
     for (tstep in 1:h) {
-      # factor evolve: f_{t+1} = psi * f_t + eta, eta ~ N(0, Q) with Q = I - diag(psi^2)
       if (r > 0) {
         Q <- diag(1 - psi^2, r)
         f_t <- psi * f_t + MASS::mvrnorm(1, mu = rep(0, r), Sigma = Q)
       }
       
-      # time-varying VAR matrix at this step:
       Phi_t <- Phi_c_noint
-      if (r > 0) {
+      if (r > 0)
         for (k in seq_len(r)) Phi_t <- Phi_t + Phi_f_noint[, , k] * f_t[k]
-      }
       
-      # shock ~ N(0, H_t), then update H_{t+1} via BEKK(1,1) with scalar A2,B2
       eps_t <- as.numeric(t(chol(H_t)) %*% rnorm(N))
+      y_next <- as.numeric(matrix(Phi_t, nrow = N, ncol = N*p) %*% matrix(y_lag, ncol = 1)) + eps_t
       
-      # y_{t+1} = Phi_t * [y_t, y_{t-1}, ..., y_{t-p+1}] + eps_t
-      y_next <- matrix(Phi_t, nrow = N, ncol = N * p) %*% matrix(y_lag, ncol = 1)
-      y_next <- as.numeric(y_next) + eps_t
-      
-      # store
       Ypaths[b, tstep, ] <- y_next
-      
-      # update lag vector: prepend y_next, drop oldest block
-      if (p > 1) {
-        y_lag <- c(y_next, y_lag[1:(N * (p - 1))])
-      } else {
-        y_lag <- y_next
-      }
-      
-      # BEKK recursion for next H: H_{t+1} = Omega + B2 * H_t + A2 * eps_t eps_t'
+      if (p > 1) y_lag <- c(y_next, y_lag[1:(N*(p - 1))]) else y_lag <- y_next
       H_t <- Omega_b + B2 * H_t + A2 * (eps_t %*% t(eps_t))
     }
   }
   
-  # collapse draws -> stats
-  # (B x h x N) → for each variable n and horizon t, take quantiles across B
+  # summarize forecast draws
   qfun <- function(x, probs) stats::quantile(x, probs = probs, na.rm = TRUE)
   med  <- apply(Ypaths, c(2, 3), qfun, probs = 0.50)
   lb   <- apply(Ypaths, c(2, 3), qfun, probs = min(intervals))
   ub   <- apply(Ypaths, c(2, 3), qfun, probs = max(intervals))
   mu   <- apply(Ypaths, c(2, 3), mean, na.rm = TRUE)
   
-  # return as N x h matrices (transpose: horizons in columns)
   fc <- list(
     median = t(med),
-    lb     = t(lb),
-    ub     = t(ub),
+    lb     = if (is_penalized) NULL else t(lb),
+    ub     = if (is_penalized) NULL else t(ub),
     mean   = t(mu),
     data   = VAR.data,
-    meta   = list(
-      N = N,
-      h = h,
-      B = B,
-      method = "tvpred"
-    )
+    meta   = list(N = N, h = h, B = B, method = if (is_penalized) "tvpred_pen" else "tvpred")
   )
   
   class(fc) <- c("tvpred", "tvvar_result")
