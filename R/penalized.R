@@ -10,7 +10,7 @@
 #' @param init            "default", "random", or "custom"
 #' @param init_list       named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
-#' @return tvvar_fit list (same fields as unpenalized_estimate output)
+#' @return tvfit list (same fields as unpenalized_estimate output)
 #' @export
 penalized_estimate <- function(data,
                                p = 1,

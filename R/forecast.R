@@ -1,10 +1,10 @@
-#' Multi-step forecasts for a tvvar_fit (unpenalized ML)
+#' Multi-step forecasts for a tvfit (unpenalized ML)
 #'
 #' Simulates recursive forecasts y_{T+1}, …, y_{T+h} using parameter draws
 #' from the asymptotic normal N(theta, vcov) and simulated factor paths.
 #' Volatility is propagated with a simple BEKK(1,1) recursion using simulated shocks.
 #'
-#' @param fit   tvvar_fit from unpenalized_estimate(..., method = "ML")
+#' @param fit   tvfit from unpenalized_estimate(..., method = "ML")
 #' @param h     integer horizon (number of steps ahead)
 #' @param B     number of Monte Carlo paths (set B=1 for plug-in path)
 #' @param seed  optional integer seed (reproducibility)
@@ -16,7 +16,7 @@
 #'   \item{paths}{optional B x h x N array (only if B not too large)}
 #' @importFrom MASS mvrnorm
 #' @export
-forecast_tvvar <- function(fit,
+tvpred <- function(fit,
                            h = 8,
                            B = 500,
                            seed = NULL,
@@ -147,39 +147,48 @@ forecast_tvvar <- function(fit,
   mu   <- apply(Ypaths, c(2, 3), mean, na.rm = TRUE)
   
   # return as N x h matrices (transpose: horizons in columns)
-  list(
+  fc <- list(
     median = t(med),
     lb     = t(lb),
     ub     = t(ub),
-    mean   = t(mu)
-    # You can also return paths = Ypaths if you want raw draws
+    mean   = t(mu),
+    data   = VAR.data,
+    meta   = list(
+      N = N,
+      h = h,
+      B = B,
+      method = "tvpred"
+    )
   )
+  
+  class(fc) <- c("tvpred", "tvvar_result")
+  return(fc)
 }
-
 
 #' Plot forecasts with optional history and forecast boundary marker
 #'
-#' Plots forecasted means or medians (with CI if available), shows optional
-#' recent history before the forecast, and adds a vertical line at the
-#' forecast start. The last observed point is connected to the first forecast.
+#' Plots forecasted means or medians (with CI if available), shows recent history,
+#' and adds a vertical line at the forecast start. By default (`var = NULL`) it
+#' plots all variables (one panel per series, vertically stacked).
 #'
-#' @param fc list returned by `forecast_tvvar()`.
-#' @param var integer index of variable (1..N).
-#' @param y_hist optional numeric vector of observed values (same variable).
+#' @param fc list returned by `tvpred()`. Must contain
+#'   `median` or `mean` (N×h or h×N), optional `lb`/`ub`, and `data` (T×N).
+#' @param var integer vector of variables to plot (1..N). Default `NULL` = all.
 #' @param hist_n number of last historical observations to show (default 50).
-#' @param main plot title.
+#' @param main optional overall title (used in base mode).
 #' @param ci_col shading color for confidence band.
 #' @param line_col color for forecast line.
 #' @param hist_col color for history line.
 #' @param connect_col color for connecting line (default same as forecast line).
 #' @param vline_col color for vertical split line (default grey40).
 #' @param vline_lty linetype for split (default dotted, 2).
-#' @param show_median logical; if TRUE, plot median if available.
+#' @param show_median logical; if TRUE and `fc$median` exists, plot medians; else means.
+#' @param y_hist optional history override. If supplied, can be a vector (T) for
+#'   a single series or a matrix (T×N) matching `fc$data`.
 #' @param ... passed to underlying plot functions.
 #' @export
-plot_forecast <- function(fc,
-                          var = 1,
-                          y_hist = NULL,
+plot.tvpred <- function(fc,
+                          var = NULL,
                           hist_n = 50,
                           main = NULL,
                           ci_col = "grey80",
@@ -189,120 +198,178 @@ plot_forecast <- function(fc,
                           vline_col = "grey40",
                           vline_lty = 2,
                           show_median = TRUE,
+                          y_hist = NULL,
                           ...) {
-  
+  `%||%` <- function(a, b) if (is.null(a)) b else a
   connect_col <- connect_col %||% line_col
   stopifnot(is.list(fc))
+  if (is.null(fc$data))
+    stop("`fc$data` (T×N) was not found in `fc`. The forecast object must include the original data.")
   
-  center_mat <- if (show_median && !is.null(fc$median)) fc$median else fc$mean
-  if (is.null(center_mat))
-    stop("`fc` must have at least `mean` (N x h).")
+  Y <- as.matrix(fc$data)           # T × N history
+  Tn <- nrow(Y); N <- ncol(Y)
   
-  N <- nrow(center_mat); h <- ncol(center_mat)
-  if (var > N) stop("`var` exceeds N.")
-  center <- as.numeric(center_mat[var, ])
-  lower  <- if (!is.null(fc$lb)) as.numeric(fc$lb[var, ]) else rep(NA_real_, h)
-  upper  <- if (!is.null(fc$ub)) as.numeric(fc$ub[var, ]) else rep(NA_real_, h)
+  # Choose center matrix
+  center0 <- if (isTRUE(show_median) && !is.null(fc$median)) fc$median else fc$mean
+  if (is.null(center0)) stop("`fc` must contain either `median` or `mean`.")
   
-  # Optional history
-  has_hist <- !is.null(y_hist)
-  if (has_hist) {
-    y_hist <- as.numeric(y_hist)
-    hist_n <- min(hist_n, length(y_hist))
-    y_hist_plot <- tail(y_hist, hist_n)
-    x_hist <- seq.int(-hist_n + 1L, 0L)
-    x_fc <- seq_len(h)
+  # Normalize forecast matrices to N×h (rows = series, cols = horizons)
+  to_Nxh <- function(M) {
+    if (is.null(M)) return(NULL)
+    M <- as.matrix(M)
+    if (nrow(M) == N) {
+      M
+    } else if (ncol(M) == N) {
+      t(M)
+    } else {
+      stop("Could not align forecast matrix with N = ", N, ". Expect N×h or h×N.")
+    }
+  }
+  center <- to_Nxh(center0)
+  lb     <- to_Nxh(fc$lb)
+  ub     <- to_Nxh(fc$ub)
+  h      <- ncol(center)
+  
+  # Pick series set
+  if (is.null(var)) var <- seq_len(N)
+  if (any(var < 1 | var > N)) stop("`var` must be indices in 1..N.")
+  
+  # Determine history source (override if provided)
+  if (!is.null(y_hist)) {
+    y_hist <- as.matrix(y_hist)
+    if (nrow(y_hist) != Tn) stop("`y_hist` must have ", Tn, " rows to match `fc$data`.")
+    if (ncol(y_hist) == 1L && length(var) == 1L) {
+      Y_use <- matrix(NA_real_, nrow = Tn, ncol = N)
+      Y_use[, var] <- y_hist[, 1]
+    } else if (ncol(y_hist) == N) {
+      Y_use <- y_hist
+    } else {
+      stop("`y_hist` must be a vector (T) for one series or a matrix (T×N).")
+    }
   } else {
-    y_hist_plot <- NULL
-    x_hist <- NULL
-    x_fc <- seq_len(h)
+    Y_use <- Y
   }
   
-  # Try ggplot2
+  hist_n <- max(1L, min(hist_n, Tn))
+  Hx <- seq_len(h)                     # 1..h
+  
+  # ggplot version (preferred)
   if (requireNamespace("ggplot2", quietly = TRUE)) {
+    df_list <- vector("list", length(var))
+    for (idx in seq_along(var)) {
+      j <- var[idx]
+      y_hist_j <- tail(Y_use[, j], hist_n)
+      x_hist   <- seq.int(-hist_n + 1L, 0L)
+      
+      df_h <- data.frame(
+        series = factor(paste0("y", j), levels = paste0("y", var)),
+        x      = x_hist,
+        value  = y_hist_j,
+        part   = "history",
+        lower  = NA_real_,
+        upper  = NA_real_
+      )
+      
+      df_f <- data.frame(
+        series = factor(paste0("y", j), levels = paste0("y", var)),
+        x      = Hx,
+        value  = center[j, ],
+        part   = "forecast",
+        lower  = if (is.null(lb)) NA_real_ else lb[j, ],
+        upper  = if (is.null(ub)) NA_real_ else ub[j, ]
+      )
+      
+      df_list[[idx]] <- rbind(df_h, df_f)
+    }
+    df <- do.call(rbind, df_list)
+    
     gg <- ggplot2::ggplot()
     
-    if (has_hist) {
-      df_hist <- data.frame(x = x_hist, y = y_hist_plot)
-      gg <- gg + ggplot2::geom_line(data = df_hist, ggplot2::aes(x, y),
-                                    color = hist_col, linewidth = 0.6)
+    # ribbons
+    if (!is.null(lb) && !is.null(ub)) {
+      gg <- gg +
+        ggplot2::geom_ribbon(
+          data = subset(df, part == "forecast"),
+          ggplot2::aes(x = x, ymin = lower, ymax = upper),
+          fill = ci_col, alpha = 0.45
+        )
     }
     
-    df_fc <- data.frame(x = x_fc, center = center, lower = lower, upper = upper)
+    # forecast + history lines
+    gg <- gg +
+      ggplot2::geom_line(
+        data = subset(df, part == "forecast"),
+        ggplot2::aes(x = x, y = value),
+        linewidth = 1.1, color = line_col
+      ) +
+      ggplot2::geom_line(
+        data = subset(df, part == "history"),
+        ggplot2::aes(x = x, y = value),
+        linewidth = 0.7, color = hist_col
+      )
     
-    if (!all(is.na(lower)) && !all(is.na(upper))) {
-      gg <- gg + ggplot2::geom_ribbon(
-        data = df_fc,
-        ggplot2::aes(x = x, ymin = lower, ymax = upper),
-        fill = ci_col, alpha = 0.5
+    # connector per series
+    connectors <- do.call(rbind, lapply(split(df, df$series), function(dsi) {
+      dh <- subset(dsi, part == "history")
+      dfc <- subset(dsi, part == "forecast")
+      if (nrow(dh) == 0 || nrow(dfc) == 0) return(NULL)
+      data.frame(
+        series = unique(dsi$series),
+        x     = 0, xend = 1,
+        y     = dh$value[which.max(dh$x)],
+        yend  = dfc$value[1]
+      )
+    }))
+    
+    if (!is.null(connectors) && nrow(connectors)) {
+      gg <- gg + ggplot2::geom_segment(
+        data = connectors,
+        ggplot2::aes(x = x, xend = xend, y = y, yend = yend),
+        linewidth = 1.05, color = connect_col
       )
     }
     
-    gg <- gg + ggplot2::geom_line(
-      data = df_fc,
-      ggplot2::aes(x = x, y = center),
-      color = line_col, linewidth = 1.1
-    )
-    
-    # Add connecting line (from last history to first forecast)
-    if (has_hist) {
-      gg <- gg +
-        ggplot2::geom_segment(
-          x = 0, xend = 1,
-          y = tail(y_hist_plot, 1),
-          yend = center[1],
-          color = connect_col,
-          linewidth = 1.0
-        ) +
-        ggplot2::geom_vline(xintercept = 0, linetype = vline_lty, color = vline_col)
-    }
-    
+    # vertical split + facets (VERTICAL)
     gg <- gg +
-      ggplot2::theme_minimal(base_size = 13) +
+      ggplot2::geom_vline(xintercept = 0, linetype = vline_lty, color = vline_col) +
+      ggplot2::facet_wrap(~ series, ncol = 1, scales = "free_y") +
+      ggplot2::theme_minimal(base_size = 12) +
       ggplot2::labs(
-        title = main %||% sprintf("Forecast (series %d)", var),
-        x = if (has_hist) "Time (0 = forecast start)" else "Horizon",
-        y = if (show_median && !is.null(fc$median)) "Median" else "Mean"
+        title = main %||% "Forecasts",
+        x = "Time (0 = forecast start)",
+        y = if (isTRUE(show_median) && !is.null(fc$median)) "Median" else "Mean"
       )
     
     return(gg)
   }
   
-  # --- Base R fallback ---
-  if (has_hist) {
-    y_all <- c(y_hist_plot, center, lower, upper)
-    y_rng <- range(y_all, na.rm = TRUE)
+  ## --- Base R fallback (stacked vertically) ---
+  K <- length(var)
+  op <- par(mfrow = c(K, 1), mgp = c(2, 0.8, 0), mar = 0.1 + c(3,3,2,1))
+  on.exit(par(op), add = TRUE)
+  
+  for (j in var) {
+    y_hist_j <- tail(Y_use[, j], hist_n)
+    x_hist   <- seq.int(-hist_n + 1L, 0L)
+    y_center <- center[j, ]
+    y_lb     <- if (is.null(lb)) rep(NA_real_, h) else lb[j, ]
+    y_ub     <- if (is.null(ub)) rep(NA_real_, h) else ub[j, ]
     
-    plot(x_hist, y_hist_plot, type = "l", col = hist_col, lwd = 1,
-         ylim = y_rng,
-         xlab = "Time (0 = forecast start)",
-         ylab = if (show_median && !is.null(fc$median)) "Median" else "Mean",
-         main = main %||% sprintf("Forecast (series %d)", var),
-         ...)
+    yrng <- range(c(y_hist_j, y_center, y_lb, y_ub), na.rm = TRUE)
+    plot(x_hist, y_hist_j, type = "l", col = hist_col, lwd = 1,
+         ylim = yrng, xlab = "Time (0 = forecast start)",
+         ylab = if (isTRUE(show_median) && !is.null(fc$median)) "Median" else "Mean",
+         main = paste0("y", j), ...)
     
-    if (!any(is.na(lower)) && !any(is.na(upper))) {
-      polygon(c(x_fc, rev(x_fc)), c(lower, rev(upper)),
-              col = adjustcolor(ci_col, alpha.f = 0.4), border = NA)
+    if (!all(is.na(y_lb)) && !all(is.na(y_ub))) {
+      polygon(c(Hx, rev(Hx)), c(y_lb, rev(y_ub)),
+              col = grDevices::adjustcolor(ci_col, alpha.f = 0.4), border = NA)
     }
-    lines(x_fc, center, col = line_col, lwd = 2)
+    lines(Hx, y_center, col = line_col, lwd = 2)
     
-    # connecting line between last observed and first forecast
-    segments(0, tail(y_hist_plot, 1), 1, center[1],
-             col = connect_col, lwd = 2)
-    
+    # connector
+    segments(0, tail(y_hist_j, 1), 1, y_center[1], col = connect_col, lwd = 2)
     abline(v = 0, lty = vline_lty, col = vline_col)
-    
-  } else {
-    y_rng <- range(c(center, lower, upper), na.rm = TRUE)
-    plot(x_fc, center, type = "l", col = line_col, lwd = 2,
-         ylim = y_rng, xlab = "Horizon",
-         ylab = if (show_median && !is.null(fc$median)) "Median" else "Mean",
-         main = main %||% sprintf("Forecast (series %d)", var), ...)
-    if (!any(is.na(lower)) && !any(is.na(upper))) {
-      polygon(c(x_fc, rev(x_fc)), c(lower, rev(upper)),
-              col = adjustcolor(ci_col, alpha.f = 0.4), border = NA)
-      lines(x_fc, center, col = line_col, lwd = 2)
-    }
   }
   
   invisible(NULL)

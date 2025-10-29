@@ -162,7 +162,7 @@
 #' @param print logical; if TRUE, print nicely (uses knitr::kable when available).
 #' @return (invisibly) a list with info, params, and block tables.
 #' @export
-tvvar_summary <- function(fit, digits = 3, print = TRUE) {
+summary.tvfit <- function(fit, digits = 3, print = TRUE) {
   stopifnot(is.list(fit), !is.null(fit$meta))
   
   # parameter vector and vcov (works for ML/EM; penalized may be NA)

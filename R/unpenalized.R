@@ -120,7 +120,7 @@
 #'   \item \strong{custom}: take values from \code{init_list} (fallback to defaults if a field is missing).
 #' }
 #'
-#' The returned object has class \code{"tvvar_fit"} and contains:
+#' The returned object has class \code{"tvfit"} and contains:
 #' \itemize{
 #'   \item \code{$estimate}: list with \code{A}, \code{B}, \code{phi_r}, \code{Phi_f}, \code{Phi_c}, \code{Omega}.
 #'   \item \code{$lik}: average and summed log-likelihood.
@@ -132,7 +132,7 @@
 #'   \item \code{$meta}: dims, method, free pattern, and \code{time} (runtime in seconds).
 #' }
 #'
-#' @return A \code{tvvar_fit} list (same structure used by \code{penalized_estimate()}).
+#' @return A \code{tvfit} list (same structure used by \code{penalized_estimate()}).
 #' @export
 #'
 #' @examples
@@ -270,7 +270,7 @@ unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
     meta = list(N = N, p = p, r = r, zero.mean = isTRUE(cfg$zero.mean),
                 nobs = ss$T.fin, method = "ML", Phi.f.array = Phi.f.array)
   )
-  class(out) <- "tvvar_fit"
+  class(out) <- "tvfit"
   out
 }
 
@@ -396,6 +396,6 @@ unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
     meta = list(N = N, p = p, r = r, zero.mean = isTRUE(cfg$zero.mean),
                 nobs = ss$T.fin, method = "EM", Phi.f.array = Phi.f.array)
   )
-  class(out) <- "tvvar_fit"
+  class(out) <- "tvfit"
   out
 }
