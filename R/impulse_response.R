@@ -161,6 +161,8 @@ tvirf <- function(fit,
   
   # ========= Penalized branch (your current code, per shock) =========
   {
+    
+    
     Phi_c_est <- fit$estimate$Phi_c          # N x (1+N*p)
     Phi_f_est <- fit$estimate$Phi_f          # N x (1+N*p) x r
     psi       <- as.numeric(fit$estimate$phi_r)
@@ -178,6 +180,11 @@ tvirf <- function(fit,
     
     ev <- fit$eval
     if (is.null(ev)) stop("fit$eval is NULL; evaluate model before IRFs.")
+    
+    warning(
+      "Penalized IRFs do not include parameter uncertainty. ",
+      "Reported variability (if any) reflects only factor simulations."
+    )
     
     for (kk in seq_along(shocked_ids)) {
       k <- shocked_ids[kk]
