@@ -36,7 +36,7 @@ penalized_estimate(
 \item{init_list}{named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)}
 }
 \value{
-tvvar_fit list (same fields as unpenalized_estimate output)
+tvfit list (same fields as unpenalized_estimate output)
 }
 \description{
 Penalized estimation (ECM) with optional adaptive weights

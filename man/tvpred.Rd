@@ -14,7 +14,7 @@ tvpred(
 )
 }
 \arguments{
-\item{fit}{tvvar_fit from unpenalized_estimate(..., method = "ML")}
+\item{fit}{tvfit from unpenalized_estimate(..., method = "ML")}
 
 \item{h}{integer horizon (number of steps ahead)}
 

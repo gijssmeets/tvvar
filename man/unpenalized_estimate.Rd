@@ -50,7 +50,7 @@ Recognized elements: \code{A}, \code{B}, \code{phi_r}, \code{Omega} (\eqn{N \tim
 and \code{Phi_f} (vector for the free \eqn{\Phi^f} entries in mask order).}
 }
 \value{
-A \code{tvvar_fit} list (same structure used by \code{penalized_estimate()}).
+A \code{tvfit} list (same structure used by \code{penalized_estimate()}).
 }
 \description{
 Fits the time-varying VAR using either direct maximum likelihood (ML) or
@@ -68,7 +68,7 @@ Initialization:
 \item \strong{custom}: take values from \code{init_list} (fallback to defaults if a field is missing).
 }
 
-The returned object has class \code{"tvvar_fit"} and contains:
+The returned object has class \code{"tvfit"} and contains:
 \itemize{
 \item \code{$estimate}: list with \code{A}, \code{B}, \code{phi_r}, \code{Phi_f}, \code{Phi_c}, \code{Omega}.
 \item \code{$lik}: average and summed log-likelihood.

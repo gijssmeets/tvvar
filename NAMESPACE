@@ -2,11 +2,11 @@
 
 S3method(plot,tvirf)
 S3method(plot,tvpred)
+S3method(summary,tvfit)
 export(penalized_estimate)
 export(simulate_tvvar_data)
 export(tvirf)
 export(tvpred)
-export(tvvar_summary)
 export(unpenalized_estimate)
 import(RcppArmadillo)
 import(dplyr)
