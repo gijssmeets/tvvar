@@ -15,16 +15,17 @@ Authors@R:
       person(given = "Gijs", family = "Smeets",
              role = "aut",
              email = "gijsolinsmeets@gmail.com"))
-Description: Time Varying VAR Models (make longer description)
-License: (insert license)
+Description: Provides tools for estimating and analyzing time-varying VAR (Vector Autoregressive) models, including penalized and unpenalized estimation, impulse responses, and forecasting.
+License: MIT + file LICENSE
 URL: https://github.com/gijssmeets/tvvar
 BugReports: https://github.com/gijssmeets/tvvar/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Imports: MASS, Rcpp, vars, numDeriv, matrixcalc, dplyr
+Imports: MASS, Rcpp, vars, numDeriv, matrixcalc, dplyr, RcppArmadillo, ggplot2, apg
+Remotes: jpvert/apg
 LinkingTo: Rcpp, RcppArmadillo
-Suggests: testthat (>= 3.0.0), knitr, rmarkdown
+Suggests: knitr, rmarkdown
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Depends: 
