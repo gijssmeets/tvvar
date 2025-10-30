@@ -29,7 +29,7 @@ tvpenfit(
 
 \item{penalty_type}{"adaptive" or "regular"}
 
-\item{Phi.f.structure}{Optional free-pattern for Phi^f (3D \link{N,N,r}, list of r N x N, or N x (N*r) matrix)}
+\item{Phi.f.structure}{Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)}
 
 \item{init}{"default", "random", or "custom"}
 

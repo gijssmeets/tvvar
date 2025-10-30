@@ -4,16 +4,18 @@
 \alias{summary.tvfit}
 \title{Summarize a time-varying VAR fit}
 \usage{
-\method{summary}{tvfit}(fit, digits = 3, print = TRUE)
+\method{summary}{tvfit}(object, digits = 3, print = TRUE, ...)
 }
 \arguments{
-\item{fit}{A fitted object of class \code{tvfit}, returned by \code{\link[=tvfit]{tvfit()}} or \code{\link[=tvpenfit]{tvpenfit()}}.}
+\item{object}{A fitted object of class \code{tvfit}, returned by \code{\link[=tvfit]{tvfit()}} or \code{\link[=tvpenfit]{tvpenfit()}}.}
 
 \item{digits}{Integer; number of decimal digits for printed output (default = 3).}
 
 \item{print}{Logical; if \code{TRUE} (default), prints formatted tables
 (using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
 data frames invisibly.}
+
+\item{...}{Additional arguments (currently ignored).}
 }
 \value{
 Invisibly returns a list with the following elements:

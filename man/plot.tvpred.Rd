@@ -5,7 +5,7 @@
 \title{Plot forecasts with optional history and forecast boundary marker}
 \usage{
 \method{plot}{tvpred}(
-  fc,
+  x,
   var = NULL,
   hist_n = 50,
   main = NULL,
@@ -21,8 +21,8 @@
 )
 }
 \arguments{
-\item{fc}{list returned by \code{tvpred()}. Must contain
-\code{median} or \code{mean} (N×h or h×N), optional \code{lb}/\code{ub}, and \code{data} (T×N).}
+\item{x}{a \code{tvpred()} object. Must contain
+\code{median} or \code{mean} (Nxh or hxN), optional \code{lb}/\code{ub}, and \code{data} (TxN).}
 
 \item{var}{integer vector of variables to plot (1..N). Default \code{NULL} = all.}
 
@@ -45,9 +45,9 @@
 \item{show_median}{logical; if TRUE and \code{fc$median} exists, plot medians; else means.}
 
 \item{y_hist}{optional history override. If supplied, can be a vector (T) for
-a single series or a matrix (T×N) matching \code{fc$data}.}
+a single series or a matrix (TxN) matching \code{fc$data}.}
 
-\item{...}{passed to underlying plot functions.}
+\item{...}{Additional graphical arguments passed to lower-level plotting functions.}
 }
 \description{
 Plots forecasted means or medians (with CI if available), shows recent history,

@@ -13,7 +13,7 @@ A list with the following elements:
 }
 }
 \source{
-Simulated via \code{\link{simulate_tvvar_data}}.
+Simulated via \code{\link{tvsim}}.
 }
 \usage{
 simsparse

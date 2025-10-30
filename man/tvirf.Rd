@@ -4,14 +4,7 @@
 \alias{tvirf}
 \title{Compute Impulse Response Functions (IRFs)}
 \usage{
-tvirf(
-  fit,
-  lags = 10,
-  T.max = 5,
-  B = 500,
-  shock_index = 1,
-  shock_position = NULL
-)
+tvirf(fit, lags = 10, T.max = 5, B = 500, shock_position = NULL)
 }
 \arguments{
 \item{fit}{tvvar_fit}
