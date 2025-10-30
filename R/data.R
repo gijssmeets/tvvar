@@ -1,17 +1,3 @@
-#' Macro dataset: IP, CPI, bond spread
-#'
-#' Monthly US data used in tvvar examples.
-#'
-#' @format A data frame with columns:
-#' \describe{
-#'   \item{date}{Date (character or Date)}
-#'   \item{ip}{Industrial production index}
-#'   \item{cpi}{Consumer Price Index}
-#'   \item{bond_spread}{Bond yield spread}
-#'   \item{recession}{Recession dummy}
-#' }
-"macro_data"
-
 #' Simulated TV-VAR dataset
 #'
 #' Artificial dataset generated from a TV-VAR(1) model with 2 variables
@@ -84,7 +70,7 @@
 #'   \item{shocks}{Numeric matrix (\eqn{T \times N}) of structural shocks.}
 #' }
 #'
-#' @source Simulated via \code{\link{simulate_tvvar_data}}.
+#' @source Simulated via \code{\link{tvsim}}.
 #'
 #' @examples
 #' data(simsparse)

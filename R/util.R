@@ -106,12 +106,13 @@
 #' and p-values, plus model information criteria and runtime.  
 #' It supports all model objects created by [tvfit()] and [tvpenfit()].
 #'
-#' @param fit A fitted object of class \code{tvfit}, returned by [tvfit()] or [tvpenfit()].
+#' @param object A fitted object of class \code{tvfit}, returned by [tvfit()] or [tvpenfit()].
 #' @param digits Integer; number of decimal digits for printed output (default = 3).
 #' @param print Logical; if \code{TRUE} (default), prints formatted tables
 #'   (using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
 #'   data frames invisibly.
-#'
+#' @param ... Additional arguments (currently ignored).
+#' @importFrom apg apg
 #' @details
 #' The output separates parameters into four logical groups:
 #' \itemize{
@@ -158,7 +159,8 @@
 #' }
 #'
 #' @export
-summary.tvfit <- function(fit, digits = 3, print = TRUE) {
+summary.tvfit <- function(object, digits = 3, print = TRUE, ...) {
+  fit <- object # S3 generic method.
   stopifnot(is.list(fit), !is.null(fit$meta))
   
   # parameter vector and vcov (works for ML/EM; penalized may be NA)

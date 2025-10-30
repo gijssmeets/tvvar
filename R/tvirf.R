@@ -18,7 +18,6 @@ tvirf <- function(fit,
                 lags = 10,
                 T.max = 5,
                 B = 500,
-                shock_index = 1,
                 shock_position = NULL) {
   
   stopifnot(is.list(fit), !is.null(fit$meta))
@@ -27,7 +26,7 @@ tvirf <- function(fit,
   r <- fit$meta$r
   
   if (is.null(shock_position)) {
-    warning("`shock_position` not provided — defaulting to a unit shock in variable 1.")
+    warning("`shock_position` not provided - defaulting to a unit shock in variable 1.")
     shock_position <- rep(0, N)
     shock_position[1] <- 1
   } else {
@@ -252,10 +251,12 @@ tvirf <- function(fit,
 }
 
 #' Plot IRFs (single or multiple shocks)
-#' @param irf_obj result of irf() (single IRF list or multi-shock list)
+#' @param x a `tvirf()` object (single IRF list or multi-shock list)
 #' @param t which time index to plot (default 1)
+#' @param ... Additional graphical arguments passed to lower-level plotting functions.
 #' @export
-plot.tvirf <- function(irf_obj, t = 1) {
+plot.tvirf <- function(x, t = 1, ...) {
+  irf_obj <- x # S3 generic function
   if (is.list(irf_obj) && !is.null(irf_obj$IRF_lb)) {
     # single object -> wrap as one-element list
     nm <- paste0("shock_", irf_obj$meta$shock_var %||% 1L)

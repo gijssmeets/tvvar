@@ -155,8 +155,8 @@ tvpred <- function(fit,
 #' and adds a vertical line at the forecast start. By default (`var = NULL`) it
 #' plots all variables (one panel per series, vertically stacked).
 #'
-#' @param fc list returned by `tvpred()`. Must contain
-#'   `median` or `mean` (N×h or h×N), optional `lb`/`ub`, and `data` (T×N).
+#' @param x a `tvpred()` object. Must contain
+#'   `median` or `mean` (Nxh or hxN), optional `lb`/`ub`, and `data` (TxN).
 #' @param var integer vector of variables to plot (1..N). Default `NULL` = all.
 #' @param hist_n number of last historical observations to show (default 50).
 #' @param main optional overall title (used in base mode).
@@ -168,10 +168,11 @@ tvpred <- function(fit,
 #' @param vline_lty linetype for split (default dotted, 2).
 #' @param show_median logical; if TRUE and `fc$median` exists, plot medians; else means.
 #' @param y_hist optional history override. If supplied, can be a vector (T) for
-#'   a single series or a matrix (T×N) matching `fc$data`.
-#' @param ... passed to underlying plot functions.
+#'   a single series or a matrix (TxN) matching `fc$data`.
+#' @param ... Additional graphical arguments passed to lower-level plotting functions.
+#' @import ggplot2
 #' @export
-plot.tvpred <- function(fc,
+plot.tvpred <- function(x,
                           var = NULL,
                           hist_n = 50,
                           main = NULL,
@@ -184,20 +185,21 @@ plot.tvpred <- function(fc,
                           show_median = TRUE,
                           y_hist = NULL,
                           ...) {
+  fc <- x # S3 method dispatch
   `%||%` <- function(a, b) if (is.null(a)) b else a
   connect_col <- connect_col %||% line_col
   stopifnot(is.list(fc))
   if (is.null(fc$data))
-    stop("`fc$data` (T×N) was not found in `fc`. The forecast object must include the original data.")
+    stop("`fc$data` (TxN) was not found in `fc`. The forecast object must include the original data.")
   
-  Y <- as.matrix(fc$data)           # T × N history
+  Y <- as.matrix(fc$data)           # T x N history
   Tn <- nrow(Y); N <- ncol(Y)
   
   # Choose center matrix
   center0 <- if (isTRUE(show_median) && !is.null(fc$median)) fc$median else fc$mean
   if (is.null(center0)) stop("`fc` must contain either `median` or `mean`.")
   
-  # Normalize forecast matrices to N×h (rows = series, cols = horizons)
+  # Normalize forecast matrices to Nxh (rows = series, cols = horizons)
   to_Nxh <- function(M) {
     if (is.null(M)) return(NULL)
     M <- as.matrix(M)
@@ -206,7 +208,7 @@ plot.tvpred <- function(fc,
     } else if (ncol(M) == N) {
       t(M)
     } else {
-      stop("Could not align forecast matrix with N = ", N, ". Expect N×h or h×N.")
+      stop("Could not align forecast matrix with N = ", N, ". Expect Nxh or hxN.")
     }
   }
   center <- to_Nxh(center0)
@@ -228,7 +230,7 @@ plot.tvpred <- function(fc,
     } else if (ncol(y_hist) == N) {
       Y_use <- y_hist
     } else {
-      stop("`y_hist` must be a vector (T) for one series or a matrix (T×N).")
+      stop("`y_hist` must be a vector (T) for one series or a matrix (TxN).")
     }
   } else {
     Y_use <- Y

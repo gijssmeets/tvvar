@@ -10,7 +10,7 @@
 #' @param zero.mean Logical; if TRUE, intercepts fixed at 0
 #' @param lambda_penalty Numeric scalar; L1 penalty level for Phi.f
 #' @param penalty_type "adaptive" or "regular"
-#' @param Phi.f.structure Optional free-pattern for Phi^f (3D [N,N,r], list of r N x N, or N x (N*r) matrix)
+#' @param Phi.f.structure Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)
 #' @param init "default", "random", or "custom"
 #' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
