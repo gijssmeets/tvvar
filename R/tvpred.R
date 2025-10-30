@@ -27,7 +27,7 @@ tvpred <- function(fit,
   VAR.data <- fit$meta$data
   T.fin <- nrow(VAR.data)
   
-  is_penalized <- !identical(fit$meta$method, "ML")
+  is_penalized <- !identical(fit$meta$method, "unpenalized")
   
   if (is_penalized) {
     warning("Penalized forecast: parameter uncertainty ignored; only factor & shock variability simulated.")

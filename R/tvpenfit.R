@@ -1,26 +1,31 @@
-#' Penalized estimation (ECM) with optional adaptive weights
+#' Penalized time-varying VAR estimation (ECM)
 #'
-#' @param data            numeric matrix (T x N)
-#' @param p               integer VAR lag order
-#' @param r               integer number of factors
-#' @param zero.mean       logical; if TRUE, intercepts fixed at 0
-#' @param lambda_penalty  numeric scalar; L1 penalty level for Phi.f
-#' @param penalty_type    "adaptive" or "regular"
-#' @param Phi.f.structure optional free-pattern for Phi^f (3D [N,N,r], list of r N x N, or N x (N*r) matrix)
-#' @param init            "default", "random", or "custom"
-#' @param init_list       named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
+#' Fits a penalized time-varying VAR (TV-VAR) model using the ECM algorithm.
+#' Optionally uses adaptive weights for shrinkage. The estimated object can be
+#' passed to functions such as `tvirf()` and `tvpred()` for IRFs and forecasting.
 #'
-#' @return tvfit list (same fields as unpenalized_estimate output)
+#' @param data Numeric matrix (T x N)
+#' @param p Integer VAR lag order
+#' @param r Integer number of factors
+#' @param zero.mean Logical; if TRUE, intercepts fixed at 0
+#' @param lambda_penalty Numeric scalar; L1 penalty level for Phi.f
+#' @param penalty_type "adaptive" or "regular"
+#' @param Phi.f.structure Optional free-pattern for Phi^f (3D [N,N,r], list of r N x N, or N x (N*r) matrix)
+#' @param init "default", "random", or "custom"
+#' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
+#'
+#' @return Object of class `tvvar_fit`, same structure as from `tvfit()`
+#' @seealso [tvfit()], [tvirf()], [tvpred()]
 #' @export
-penalized_estimate <- function(data,
-                               p = 1,
-                               r = 1,
-                               zero.mean = TRUE,
-                               lambda_penalty = 0.01,
-                               penalty_type = c("adaptive", "regular"),
-                               Phi.f.structure = NULL,
-                               init = c("default", "random", "custom"),
-                               init_list = NULL) {
+tvpenfit <- function(data,
+                     p = 1,
+                     r = 1,
+                     zero.mean = TRUE,
+                     lambda_penalty = 0.01,
+                     penalty_type = c("adaptive", "regular"),
+                     Phi.f.structure = NULL,
+                     init = c("default", "random", "custom"),
+                     init_list = NULL) {
   start_time   <- Sys.time()
   penalty_type <- match.arg(penalty_type)
   init         <- match.arg(init)
@@ -158,11 +163,11 @@ penalized_estimate <- function(data,
     vcov  = matrix(NA_real_, length(params), length(params)),  # placeholder under L1
     theta = params,
     meta  = list(N = N, p = p, r = r, zero.mean = isTRUE(zero.mean),
-                 nobs = T.fin, method = "ECM-penalized",
+                 nobs = T.fin, method = "penalized",
                  Phi.f.array = Phi.f.array,
                  lambda = lambda_penalty, weights = penalty_type,
                  init = init, time = runtime_sec, data = data)
   )
-  class(out) <- "tvvar_fit"
+  class(out) <- "tvfit"
   out
 }

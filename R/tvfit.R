@@ -80,13 +80,12 @@
   )
 }
 
-#' Unpenalized estimation for TV–VAR (ML or EM)
+#' Time-varying VAR estimation (ML or EM)
 #'
 #' @description
-#' Fits the time-varying VAR using either direct maximum likelihood (ML) or
-#' an EM routine, without sparsity penalties. Shares the same output structure
-#' as \code{penalized_estimate()} so downstream code (IRFs, summaries, plots)
-#' works uniformly.
+#' Fits a time-varying VAR (TV–VAR) using either direct maximum likelihood (ML)
+#' or an EM routine, without sparsity penalties. Produces an object compatible
+#' with downstream functions such as [tvirf()] and [tvpred()].
 #'
 #' @param data Numeric matrix \code{T x N} (rows = time, cols = variables).
 #' @param p Integer VAR lag order.
@@ -132,38 +131,39 @@
 #'   \item \code{$meta}: dims, method, free pattern, and \code{time} (runtime in seconds).
 #' }
 #'
-#' @return A \code{tvfit} list (same structure used by \code{penalized_estimate()}).
+#' @return A \code{tvfit} list (same structure as from \code{tvpenfit()}).
+#' @seealso [tvpenfit()], [tvirf()], [tvpred()]
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' # ML with default init
-#' fit_ml <- unpenalized_estimate(
+#' fit_ml <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
 #'   phi_f_structure = matrix(1, 2, 2), method = "ML"
 #' )
 #'
 #' # EM with random init
-#' fit_em <- unpenalized_estimate(
+#' fit_em <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
 #'   phi_f_structure = matrix(1, 2, 2), method = "EM",
 #'   init = "random"
 #' )
 #'
 #' # ML with custom init for A and B only (others fall back to defaults)
-#' fit_ml_custom <- unpenalized_estimate(
+#' fit_ml_custom <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
 #'   phi_f_structure = matrix(1, 2, 2), method = "ML",
 #'   init = "custom", init_list = list(A = 0.2, B = 0.7)
 #' )
 #' }
-unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
-                                 phi_f_structure = NULL,
-                                 method = c("ML","EM"),
-                                 control = list(maxit = 2000, trace = 0),
-                                 em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE),
-                                 init = c("default", "random", "custom"),
-                                 init_list = NULL) {
+tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
+                  phi_f_structure = NULL,
+                  method = c("ML","EM"),
+                  control = list(maxit = 2000, trace = 0),
+                  em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE),
+                  init = c("default", "random", "custom"),
+                  init_list = NULL) {
   method <- match.arg(method)
   init <- match.arg(init)
   
@@ -268,7 +268,7 @@ unpenalized_estimate <- function(data, p = 1, r = 1, zero.mean = TRUE,
     vcov = cov.matrix,
     theta = p_out,
     meta = list(N = N, p = p, r = r, zero.mean = isTRUE(cfg$zero.mean),
-                nobs = ss$T.fin, method = "ML", Phi.f.array = Phi.f.array)
+                nobs = ss$T.fin, method = "unpenalized", Phi.f.array = Phi.f.array)
   )
   class(out) <- "tvfit"
   out

@@ -1,3 +1,9 @@
+#' Compute Impulse Response Functions (IRFs)
+#'
+#' @description
+#' Computes time-varying impulse responses for fitted \code{tvfit} or \code{tvpenfit} models.
+#' For penalized models, confidence bands are omitted since parameter uncertainty is not well-defined.
+#'
 #' @param fit tvvar_fit
 #' @param lags horizon
 #' @param T.max number of time points (from start)
@@ -38,8 +44,8 @@ tvirf <- function(fit,
   out_multi <- setNames(vector("list", length(shocked_ids)),
                         paste0("shock_", shocked_ids))
   
-  # ========= ML branch (your original code, per shock) =========
-  if (identical(fit$meta$method, "ML")) {
+  # ========= Unpenalized branch (your original code, per shock) =========
+  if (identical(fit$meta$method, "unpenalized")) {
     
     Phi.f.array <- fit$meta$Phi.f.array
     Phi.f.array.mat.structure <- matrix(Phi.f.array, nrow = N)

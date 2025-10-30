@@ -13,7 +13,7 @@
 #' @param burn_in Number of burn-in steps (default 500).
 #' @return List with simulated data matrix Y (T x N), latent factors, shocks, and Phi.f structure.
 #' @export
-simulate_tvvar_data <- function(T = 200, N = 2, p = 1, r = 1,
+tvsim <- function(T = 200, N = 2, p = 1, r = 1,
                                 A2 = 0.1, B2 = 0.75,
                                 pphi = 0.95,
                                 omega = matrix(c(0.3, 0.2, 0.2, 0.3), 2),

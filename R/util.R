@@ -97,21 +97,16 @@
     idx = list(head = i_head, phi_f = i_phi_f, L = i_L, phi_c = i_phi_c),
     names = c(names_head, names_phi_f, L_names, names_phi_c)
   )
-}
-
-# ---- main tidy/summary function ----
-#' Summarize a tvvar_fit object
+}#' Summarize a time-varying VAR fit
 #'
 #' @description
 #' Produces a formatted summary table for a fitted time-varying VAR model estimated
 #' via ML, EM, or penalized ECM.  
 #' The summary includes point estimates, (optional) standard errors, z-statistics,
 #' and p-values, plus model information criteria and runtime.  
-#' It supports all outputs created by \code{\link{unpenalized_estimate}} and
-#' \code{\link{penalized_estimate}}.
+#' It supports all model objects created by [tvfit()] and [tvpenfit()].
 #'
-#' @param fit A \code{tvvar_fit} object returned by
-#'   \code{\link{unpenalized_estimate}} or \code{\link{penalized_estimate}}.
+#' @param fit A fitted object of class \code{tvfit}, returned by [tvfit()] or [tvpenfit()].
 #' @param digits Integer; number of decimal digits for printed output (default = 3).
 #' @param print Logical; if \code{TRUE} (default), prints formatted tables
 #'   (using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
@@ -130,37 +125,38 @@
 #' standard errors, z-values, and two-sided normal p-values.  
 #' Otherwise, these columns are shown but contain \code{NA}.
 #'
-#' The model information block displays key meta-information (method, dimensions,
+#' The model information block displays key metadata (estimation method, dimensions,
 #' sample size) and standard information criteria (AIC, AICc, BIC).
 #'
 #' @return
 #' Invisibly returns a list with the following elements:
 #' \describe{
-#'   \item{\code{info}}{Data frame of model metadata and ICs.}
+#'   \item{\code{info}}{Model metadata and ICs.}
 #'   \item{\code{params}}{Full parameter table with estimate, SE, z, and p.}
 #'   \item{\code{blocks}}{Named list of parameter subsets: scalars, Phi\_f, L\_vech, Phi\_c.}
 #' }
+#'
+#' @seealso [tvfit()], [tvpenfit()], [tvirf()], [tvpred()]
 #'
 #' @examples
 #' \dontrun{
 #' # Example with simulated 2x2 system
 #' data <- simdata$Y
-#' fit_ml <- unpenalized_estimate(data, p = 1, r = 1, zero.mean = TRUE,
-#'                                phi_f_structure = matrix(1, 2, 2), method = "ML")
+#' fit_ml <- tvfit(data, p = 1, r = 1, zero.mean = TRUE,
+#'                 phi_f_structure = matrix(1, 2, 2), method = "ML")
 #'
 #' # Print formatted summary
-#' tvvar_summary(fit_ml)
+#' summary(fit_ml)
 #'
 #' # Retrieve underlying tables
-#' s <- tvvar_summary(fit_ml, print = FALSE)
+#' s <- summary(fit_ml, print = FALSE)
 #' head(s$params)
+#'
+#' # Penalized version
+#' fit_pen <- tvpenfit(data, p = 1, r = 1, lambda_penalty = 0.05)
+#' summary(fit_pen)
 #' }
 #'
-#' @export
-#' @param fit tvvar_fit object (from unpenalized_estimate()/penalized_estimate()).
-#' @param digits number of digits to print.
-#' @param print logical; if TRUE, print nicely (uses knitr::kable when available).
-#' @return (invisibly) a list with info, params, and block tables.
 #' @export
 summary.tvfit <- function(fit, digits = 3, print = TRUE) {
   stopifnot(is.list(fit), !is.null(fit$meta))
