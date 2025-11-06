@@ -14,7 +14,7 @@
 #' @param init "default", "random", or "custom"
 #' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
-#' @return Object of class `tvvar_fit`, same structure as from `tvfit()`
+#' @return Object of class `tvfit`, same structure as from `tvfit()`
 #' @seealso [tvfit()], [tvirf()], [tvpred()]
 #' @export
 tvpenfit <- function(data,
