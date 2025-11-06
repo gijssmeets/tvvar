@@ -1,19 +1,25 @@
-#' Time-varying VAR forecasting
+#' Predict method for time-varying VAR models
 #'
-#' Generates multi-step forecasts for a fitted tvvar model.
+#' Generates multi-step forecasts for fitted time-varying VAR models.
 #' For unpenalized (ML) fits, parameter uncertainty is included via draws from
 #' the asymptotic covariance. For penalized fits, parameters are fixed, and
 #' only factor and shock uncertainty is simulated.
 #'
-#' @param fit Fitted tvvar object from `tvfit()` (unpenalized) or `tvpenfit()` (penalized)
-#' @param h Integer forecast horizon
-#' @param B Number of Monte Carlo forecast paths
-#' @param seed Optional random seed
-#' @param intervals Quantiles to report for prediction intervals
-#' @param use_param_draws Logical; ignored for penalized fits
-#' @return Object of class `tvpred` containing median, mean, lower/upper bounds, and meta info.
+#' @param object A fitted model from [tvfit()] or [tvpenfit()].
+#' @param h Integer forecast horizon.
+#' @param B Number of Monte Carlo forecast paths (default 500).
+#' @param seed Optional random seed for reproducibility.
+#' @param intervals Numeric vector of quantiles for prediction intervals (default `c(0.16, 0.50, 0.84)`).
+#' @param use_param_draws Logical; if TRUE, draws parameters from the asymptotic covariance
+#'   (ignored for penalized fits).
+#' @param ... Unused; included for method consistency.
+#'
+#' @return An object of class `tvpred`, containing median, lower, and upper forecasts,
+#'   and meta information.
+#'
+#' @seealso [plot.tvpred()]
 #' @export
-tvpred <- function(fit,
+predict.tvfit <- function(object,
                    h = 8,
                    B = 500,
                    seed = NULL,
@@ -21,27 +27,27 @@ tvpred <- function(fit,
                    use_param_draws = TRUE) {
   if (!is.null(seed)) set.seed(seed)
   
-  N   <- fit$meta$N
-  p   <- fit$meta$p
-  r   <- fit$meta$r
-  VAR.data <- fit$meta$data
+  N   <- object$meta$N
+  p   <- object$meta$p
+  r   <- object$meta$r
+  VAR.data <- object$meta$data
   T.fin <- nrow(VAR.data)
   
-  is_penalized <- !identical(fit$meta$method, "unpenalized")
+  is_penalized <- !identical(object$meta$method, "unpenalized")
   
   if (is_penalized) {
     warning("Penalized forecast: parameter uncertainty ignored; only factor & shock variability simulated.")
-    Phi_c_est <- fit$estimate$Phi_c
-    Phi_f_est <- fit$estimate$Phi_f
-    psi       <- as.numeric(fit$estimate$phi_r)
-    ev        <- fit$eval
+    Phi_c_est <- object$estimate$Phi_c
+    Phi_f_est <- object$estimate$Phi_f
+    psi       <- as.numeric(object$estimate$phi_r)
+    ev        <- object$eval
   } else {
-    zm  <- fit$meta$zero.mean
-    Phi.f.array <- fit$meta$Phi.f.array
-    theta <- fit$theta
-    V     <- fit$vcov
+    zm  <- object$meta$zero.mean
+    Phi.f.array <- object$meta$Phi.f.array
+    theta <- object$theta
+    V     <- object$vcov
     if (is.null(theta) || is.null(V)) {
-      theta <- fit$optim$par
+      theta <- object$optim$par
       V     <- diag(1e-6, length(theta))
     }
     
@@ -148,6 +154,9 @@ tvpred <- function(fit,
   class(fc) <- c("tvpred", "tvvar_result")
   return(fc)
 }
+
+
+
 
 #' Plot forecasts with optional history and forecast boundary marker
 #'
