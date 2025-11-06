@@ -44,10 +44,19 @@ install_github("jpvert/apg", force=TRUE)
 
 ## Background
 
-This package builds on dynamic factor VAR models with conditional heteroskedastic errors [@gorgi2019dfvar]. 
+This package builds on dynamic factor VAR models with conditional heteroskedastic errors [@gorgi2019dfvar]. The **tvvar** package provides a unified framework for estimating and analyzing **time-varying vector autoregressive (TV-VAR)** models, with support for both **maximum likelihood (ML)** and **Expectation–Maximization (EM/ECM)** estimation procedures.  
+It extends traditional VAR and dynamic factor models to allow for smoothly evolving autoregressive structures and conditionally heteroskedastic shocks.
 
-[TODO]: Elaborate and refer to own paper
+The package includes the following main functions:
 
+- **`tvfit()`** – Estimates unpenalized time-varying VAR or dynamic factor VAR models via ML or EM/ECM.  
+- **`tvpenfit()`** – Estimates *penalized* TV-VAR models using L1 or adaptive L1 regularization on the factor loadings.  
+- **`tvirf()`** – Computes **time-varying impulse response functions (IRFs)** from estimated models, with support for Monte Carlo-based uncertainty quantification.  
+- **`tvpred()`** – Performs **multi-step ahead forecasting** under the estimated model, optionally incorporating parameter and factor uncertainty.  
+
+Each function supports consistent interfaces and class methods such as:
+- `plot()` — visualize time-varying parameters, IRFs, or forecasts.  
+- `summary()` — display key parameter estimates and diagnostics. 
 
 ## Data
 An example of a simulated dataset with `N` = 2, `r` = `p` = 1, with which can be called by:
@@ -164,9 +173,55 @@ sparse_fit <- tvpenfit(simsparse$Y, p = 2, r = 2, penalty_type = "adaptive", ini
 ```
 
 ## User options of *tvpenfit*
-[USER OPTIONS OF PEN]
+Performs **penalized estimation** of a time-varying VAR (TV-VAR) model using the **ECM algorithm** with proximal gradient descent.  
+The function introduces an L1 (lasso-type) penalty on the factor loadings to encourage sparsity. It supports both regular Lasso and adaptive Lasso.
 
-[SUMMARY]
+### Data
+A **T × N** numeric matrix containing the observed time series data.  
+Each column corresponds to a variable, and each row to a time observation.  
+Data are assumed to be ordered chronologically.
+
+### Lag order `p`
+Integer specifying the **lag order** of the VAR model, i.e., how many past lags are included.  
+Typical values are small (e.g., 1 or 2) for parsimonious models.
+
+### Number of factors `r`
+Integer specifying the **number of latent factors** capturing time variation in the VAR parameters.  
+Usually much smaller than the number of observed variables `N`.
+
+### Intercept `zero.mean`
+Logical; if `TRUE`, intercepts are fixed at zero, assuming that the data are demeaned.  
+If `FALSE`, intercepts are estimated in the constant block `Φ_c`.
+
+### Penalty level `lambda_penalty`
+Numeric scalar specifying the **strength of the L1 penalty** on the factor loadings `Φ_f`.  
+Larger values increase shrinkage, leading to sparser solutions.
+
+### Penalty type `penalty_type`
+Character; determines the type of penalty used:
+- `"regular"` – standard **lasso penalty**,  
+- `"adaptive"` – **adaptive lasso**, where weights are data-driven and allow less biased estimation of large coefficients.
+
+### Factor loadings structure `Phi.f.structure`
+Optional argument defining which elements of the factor loading matrices `Φ_f` are free or constrained to zero.  
+Can be provided as:
+- a 3D array `[N, N, r]`,  
+- a list of `r` `N × N` matrices, or  
+- a block matrix of size `N × (N × r)`.  
+Zero entries are treated as fixed, nonzero entries are estimated.
+
+### Initialization type `init`
+Specifies how parameter initialization is handled.  
+Options:
+- `"default"` — heuristic or deterministic starting values,  
+- `"random"` — randomized stationary initialization,  
+- `"custom"` — user-provided initial values via `init_list`.
+
+### Initialization values `init_list`
+Optional **named list** of user-supplied starting values, required when `init = "custom"`.  
+Must include some or all of:  
+`A`, `B`, `phi_r`, `Omega`, `Phi_c`, `Phi_f`.  
+Any components not provided are filled using defaults.
 
 [PLOT OF FIT]
 
@@ -189,55 +244,67 @@ The impulse responses can be plotted by
 plot(irf)
 ```
 
-Tip: Use the t argument in plot() to inspect IRFs at later time indices (e.g., `plot(irf, t = 3)`).
-
-
-
-[PERHAPS SMALL USER OPTIONS OF PLOTTING FUNCTION]
-
-
-[now for irf penalized: note that bounds are not calculated due to missing theory on penalized bounds.]
+By default, the plot shows impulse responses evaluated at the first time point (i.e., the start of the sample).
+Since the model is time-varying, impulse responses evolve over time — the transmission of a shock may differ between early and late periods. You can use the argument t in plot() to visualize the responses at other time indices.
+For example, to inspect the IRFs corresponding to the third time index `plot(irf, t = 3)`. For models estimated via tvpenfit(), the IRFs can still be computed and plotted in the same way. However, uncertainty bounds (confidence intervals) are not reported, as the asymptotic theory for penalized estimators is not yet established. Only median response paths are shown.
 
 ```{r, echo = TRUE, eval = FALSE}
 irfpen <- tvirf(sparse_fit)
 plot(irfpen)
 ```
 
-
 ## User options of *tvirf*
-[INTRO ON USER OPTIONS]
+The function `tvirf()` computes **time-varying impulse response functions (IRFs)** based on an estimated model from either `tvfit()` or `tvpenfit()`.  
+It simulates how each variable in the system responds to structural shocks over time, accounting for the evolution of model parameters.
+
+Unlike standard VAR models, where IRFs are constant, `tvirf()` produces a **sequence of IRFs across time**, reflecting how dynamic relationships change throughout the sample.  
+This is particularly useful for analyzing how the transmission of shocks evolves during different economic or financial regimes.
+
+The function supports both unpenalized (ML/EM) and penalized ECM estimates and can handle **single or multiple shocks**.  
+Users can control the IRF horizon, number of Monte Carlo replications, and which time indices are evaluated.
 
 ### Fit
-Model returned by your estimation function.
+Model object returned by `tvfit()` or `tvpenfit()`.  
 
 ### Lags
-IRF horizon (x-axis runs from 0 to lags − 1).
+Integer specifying the IRF horizon (default: 10). The x-axis of the resulting plot runs from **0 to lags − 1**, corresponding to the number of response periods after a shock.
 
 ### T.max
 Compute IRFs at the first T.max time indices (use plot(..., t = ·) to pick which to show).
 
 ### Monte Carlo draws `B`
-- Unpenalized fits: draws parameters from the asymptotic covariance (bands reflect parameter + factor uncertainty).
-- Penalized fits: keeps parameters fixed; simulates factor paths only (bands exclude parameter uncertainty).
+Number of Monte Carlo simulations for uncertainty quantification (default: 500).  
+- For **unpenalized fits**, parameters are drawn from the estimated asymptotic covariance, so the bands reflect both *parameter* and *state* uncertainty.  
+- For **penalized fits**, parameters are fixed at their penalized estimates; only factor uncertainty is propagated.
 
 ### Shock position
-Preferred way to specify shocks; a length-N vector of 0/1 (or weights). Note that multiple nonzeros compute and return one IRF object per shocked variable (internally bundled).
+
+Specifies which variable(s) are shocked.  
+The preferred format is a length-`N` vector of 0s and 1s (or numeric weights). For example:
+- `shock_position = c(1, 0, 0)` shocks only the **first** variable.  
+- `shock_position = c(0, 1, 0)` shocks only the **second** variable.  
+- `shock_position = c(1, 1, 0)` triggers computation of **two separate IRFs** — one where the first variable is shocked, and another where the second variable is shocked. Each shock generates a distinct IRF object, and all are returned as a bundled list.  
+
+When a list of IRFs (multiple shocks) is passed to plot(), the function automatically arranges the plots in a matrix layout. For instance, in a 3-variable system with shock_position = c(1, 1, 0), `plot(irf)` will produce a 3 × 2 grid of responses.
+
 
 # Prediction
 
 ## Standard usage of *tvpred*
-We can also use the fitted model to make predictions. Using the unpenalized fit from earlier, we can predict the next `h` time points as follows:
+After estimating a model with `tvfit()` or `tvpenfit()`, you can use the fitted object to generate forecasts of future observations. The function `tvpred()` simulates predictive distributions by combining the estimated time-varying parameters with Monte Carlo draws of future shocks. For example, using the unpenalized fit from earlier:
 
 ```{r, echo=TRUE, eval=TRUE, cache=TRUE}
 pred <- tvpred(fit)
 ```
 
-and we can plot it
+This produces a tvpred object containing the forecast paths, their medians, and uncertainty intervals. You can visualize the forecasts with:
 
 ```{r, echo = TRUE, eval=TRUE, fig.width=8, fig.height=6, fig.align='center'}
 plot(pred)
 ```
 
+By default, the plot shows each series over time, with the historical sample on the left and the forecast horizon on the right.
+Shaded areas indicate prediction intervals.
 
 ## User options of *tvpred*
 
