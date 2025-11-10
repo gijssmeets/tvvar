@@ -73,7 +73,7 @@ tvpenfit <- function(data,
   
   ## ---- adaptive or regular weights for Phi.f ----
   if (identical(penalty_type, "adaptive")) {
-    fit_ml <- unpenalized_estimate(
+    fit_ml <- tvfit(
       data = Y, p = p, r = r, zero.mean = zero.mean,
       phi_f_structure = matrix(1, nrow = N, ncol = N),
       method = "ML", init = "default"
