@@ -399,3 +399,74 @@ tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
   class(out) <- "tvfit"
   out
 }
+
+#' Extract all coefficients from a tvfit model
+#'
+#' @description
+#' Returns all estimated coefficients from a fitted \code{tvfit} object as one
+#' consolidated table. Unlike \code{summary.tvfit()}, this method does not print
+#' block sections — it merges all parameter groups into a single data frame.
+#'
+#' @param object A fitted object of class \code{"tvfit"}.
+#' @param digits Number of digits to round for display (default 6).
+#' @param ... Ignored; for S3 compatibility.
+#'
+#' @return A data frame with columns:
+#' \itemize{
+#'   \item \code{parameter} — parameter name
+#'   \item \code{estimate} — estimated value (transformed for scalar parameters)
+#'   \item \code{std.error} — standard error (if available)
+#'   \item \code{z.value} — z-statistic (if applicable)
+#'   \item \code{p.value} — p-value (if applicable)
+#' }
+#' @export
+coef.tvfit <- function(object, digits = 6, ...) {
+  stopifnot(inherits(object, "tvfit"))
+  
+  theta <- object$theta %||% object$optim$par
+  V     <- object$vcov
+  if (is.list(V) && !is.null(V$untransformed)) V <- V$untransformed
+  
+  map  <- .tvvar_param_index(object)
+  npar <- length(map$names)
+  
+  # Ensure theta length matches
+  if (!length(theta) || length(theta) != npar) {
+    theta <- theta[seq_len(min(length(theta), npar))]
+    if (length(theta) < npar)
+      theta <- c(theta, rep(NA_real_, npar - length(theta)))
+  }
+  
+  have_V <- is.matrix(V) && all(dim(V) == c(length(theta), length(theta)))
+  se_raw <- if (have_V) sqrt(pmax(diag(V), 0)) else rep(NA_real_, length(theta))
+  
+  est_nat <- theta
+  se_nat  <- se_raw
+  
+  # Transform head scalars (A, B, phi_r) to (0,1) with delta-method SEs
+  idx <- map$idx
+  if (length(idx$head)) {
+    inv_logit <- stats::plogis
+    h <- idx$head
+    p <- inv_logit(theta[h])
+    est_nat[h] <- p
+    if (have_V) {
+      grad <- p * (1 - p)
+      se_nat[h] <- se_raw[h] * grad
+    }
+  }
+  
+  z   <- if (all(!is.na(se_nat))) est_nat / se_nat else rep(NA_real_, length(theta))
+  pvl <- if (all(!is.na(z))) 2 * stats::pnorm(-abs(z)) else rep(NA_real_, length(theta))
+  
+  out <- data.frame(
+    parameter = map$names,
+    estimate  = round(est_nat, digits),
+    std.error = round(se_nat, digits),
+    z.value   = round(z, digits),
+    p.value   = round(pvl, digits),
+    stringsAsFactors = FALSE
+  )
+  
+  out
+}
