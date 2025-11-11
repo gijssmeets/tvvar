@@ -1,17 +1,27 @@
 #' Time-varying impulse response function (TVIRF)
 #'
-#' Computes Monte Carlo impulse responses for a fitted time-varying VAR model.
-#' For each specified horizon, it generates simulated responses to shocks at given
-#' positions in the system. Uncertainty bands are based on parameter draws.
+#' Computes Monte Carlo impulse responses for a fitted time-varying VAR model:
 #'
-#' @param fit A fitted tvvar model object (from \code{tvfit()} or \code{tvpenfit()}).
-#' @param horizon Integer. Forecast horizon (number of steps ahead) over which to compute IRFs.
-#'   The function includes responses up to and including this number of steps.
-#' @param T.max Number of time points (from the start of the sample) at which to evaluate the IRFs.
-#' @param B Number of Monte Carlo draws used for uncertainty estimation.
-#' @param shock_index Integer index (1..N) of the shocked variable. Ignored if \code{shock_position} is supplied.
-#' @param shock_position Optional numeric vector of length N specifying the exact shock magnitudes
-#'   (non-zero entries indicate which series receive shocks).
+#' \preformatted{
+#'   tvirf(fit, horizon = 10, T.max = 5, B = 500,
+#'         shock_index = 1, shock_position = NULL)
+#' }
+#'
+#' The function generates simulated responses to structural shocks over the given
+#' forecast horizon, for a set of time points in the sample. Uncertainty bands are
+#' computed from Monte Carlo parameter draws (for unpenalized fits).
+#'
+#' @param fit            Fitted tvvar model object (from \code{tvfit()} or \code{tvpenfit()}).
+#' @param horizon        Integer; forecast horizon (number of steps ahead, default = 10).
+#'                       Responses are reported up to and including this horizon.
+#' @param T.max          Integer; number of time points (from the start of the sample)
+#'                       at which to evaluate the IRFs (default = 5).
+#' @param B              Integer; number of Monte Carlo draws for uncertainty estimation
+#'                       (default = 500).
+#' @param shock_index    Integer (1..N) index of the shocked variable
+#'                       (default = 1). Ignored if \code{shock_position} is given.
+#' @param shock_position Optional numeric vector of length N specifying the exact shock
+#'                       magnitudes. Non-zero entries indicate which series receive shocks.
 #'
 #' @return Either a single IRF object — a list with components
 #'   \code{IRF_lb}, \code{IRF_med}, \code{IRF_ub}, and \code{meta} —
@@ -19,11 +29,13 @@
 #'   with attribute \code{attr(*, "tvvar_irf_multi")} set to \code{TRUE}.
 #'
 #' @details
-#' The function simulates the system’s response to a one-standard-deviation shock at the
-#' indicated variable(s), conditional on the estimated time-varying parameters.
-#' If multiple shocks are provided via \code{shock_position}, a joint IRF is computed.
-#' The horizon is fully inclusive: for example, \code{horizon = 10} produces responses
-#' at horizons 0 through 10.
+#' The function simulates the system’s dynamic response to a one-standard-deviation shock
+#' (or user-specified magnitudes) at the indicated variable(s), conditional on the
+#' time-varying parameter estimates. If multiple nonzero shocks are supplied in
+#' \code{shock_position}, a joint IRF is computed.
+#'
+#' The horizon is **inclusive**: for example, \code{horizon = 10} returns responses
+#' for horizons 0 through 10.
 #'
 #' @importFrom MASS mvrnorm
 #' @export
