@@ -171,24 +171,55 @@ predict.tvfit <- function(object,
 
 #' Plot forecasts from a tvpred object
 #'
-#' Visualizes forecasts from \code{predict.tvfit()}, showing both 68\% and 95\% prediction intervals
-#' (with lighter shading for the 95\% band). Historical data and actual time indices
-#' (if provided) can be shown on the same plot.
+#' Visualizes forecasts produced by \code{predict.tvfit()}, showing both 68\% and 95\% prediction intervals
+#' (with lighter shading for the 95\% band). The plot displays the last \code{hist_n} observations of the
+#' historical sample together with the forecast horizon.
+#'
+#' If a time index is supplied through \code{hist_time}, it will be used to label the x-axis and to extend
+#' the forecast horizon automatically by the same spacing (e.g. monthly or yearly). Otherwise, a simple
+#' numeric index (1, 2, …) is used for both history and forecast periods.
 #'
 #' @param x A `tvpred` object returned by \code{predict.tvfit()}.
 #' @param var Integer vector of variables to plot (1..N). Default = all.
-#' @param hist_y Optional historical data (T×N matrix or vector).
-#' @param hist_time Optional vector of time indices or dates for x-axis labeling.
-#' @param hist_n Number of last historical points to show (default = 50).
+#' @param hist_y Optional historical data (T×N matrix or vector) corresponding to the fitted sample.
+#' @param hist_time Optional vector of time indices or dates for the x-axis. 
+#'   Can be one of:
+#'   \itemize{
+#'     \item A \code{Date} vector, e.g. \code{seq(as.Date("2000-01-01"), by = "month", length.out = T)}.
+#'     \item A \code{POSIXct} vector for higher-frequency data (e.g. daily or intraday).
+#'     \item A numeric sequence representing time steps.
+#'   }
+#'   When provided, the function automatically takes the last \code{hist_n} values and
+#'   generates \code{h} additional time points beyond the final observed date using the same spacing.
+#' @param hist_n Number of last historical points to display (default = 50).
 #' @param main Optional overall plot title.
-#' @param ci_col68 Color for 68\% interval shading (default = "grey75").
-#' @param ci_col95 Color for 95\% interval shading (default = "grey90").
-#' @param line_col Color for forecast line (default = "steelblue").
-#' @param hist_col Color for historical line (default = "black").
-#' @param connect_col Color for connecting line (default = same as forecast line).
-#' @param vline_col Color for vertical line at forecast start (default = "grey40").
-#' @param vline_lty Linetype for vertical line (default = 2, dotted).
+#' @param ci_col68 Color for the 68\% prediction interval shading (default = "grey75").
+#' @param ci_col95 Color for the 95\% prediction interval shading (default = "grey90").
+#' @param line_col Color for the forecast line (default = "steelblue").
+#' @param hist_col Color for the historical line (default = "black").
+#' @param connect_col Color for the connecting line between history and forecast 
+#'   (default = same as forecast line).
+#' @param vline_col Color for the vertical line at forecast start (default = "grey40").
+#' @param vline_lty Linetype for the vertical line (default = 2, dotted).
 #' @param ... Additional graphical arguments passed to lower-level plotting functions.
+#'
+#' @details
+#' The time index handling works as follows:
+#' \itemize{
+#'   \item If \code{hist_time} is provided and of class \code{Date} or \code{POSIXct}, 
+#'     the function infers the frequency (e.g. daily, monthly, yearly) from the median spacing 
+#'     and extends the forecast horizon accordingly.
+#'   \item If no \code{hist_time} is provided, the function defaults to integer indices.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Example with simulated monthly data
+#' simdata$date <- seq(as.Date("2020-01-01"), by = "month", length.out = nrow(simdata$Y))
+#' fit <- tvfit(simdata$Y)
+#' pred <- predict(fit, h = 12)
+#' plot(pred, hist_y = simdata$Y, hist_time = simdata$date)
+#' }
 #'
 #' @import ggplot2
 #' @export
