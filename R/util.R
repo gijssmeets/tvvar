@@ -97,115 +97,70 @@
     idx = list(head = i_head, phi_f = i_phi_f, L = i_L, phi_c = i_phi_c),
     names = c(names_head, names_phi_f, L_names, names_phi_c)
   )
-}#' Summarize a time-varying VAR fit
+}
+
+
+#' Summarize a fitted tvfit model
 #'
 #' @description
-#' Produces a formatted summary table for a fitted time-varying VAR model estimated
-#' via ML, EM, or penalized ECM.  
-#' The summary includes point estimates, (optional) standard errors, z-statistics,
-#' and p-values, plus model information criteria and runtime.  
-#' It supports all model objects created by [tvfit()] and [tvpenfit()].
+#' Provides formatted parameter estimates, standard errors, z-values, and p-values
+#' for a fitted \code{tvfit} object. Parameters are reported in their original order,
+#' ensuring continuous numbering across blocks.
 #'
-#' @param object A fitted object of class \code{tvfit}, returned by [tvfit()] or [tvpenfit()].
-#' @param digits Integer; number of decimal digits for printed output (default = 3).
-#' @param print Logical; if \code{TRUE} (default), prints formatted tables
-#'   (using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
-#'   data frames invisibly.
-#' @param ... Additional arguments (currently ignored).
-#' @importFrom apg apg
-#' @details
-#' The output separates parameters into four logical groups:
-#' \itemize{
-#'   \item \strong{Scalars:} A, B, and factor persistence parameters (\eqn{\phi_r})
-#'   \item \strong{Phi\_f:} Factor loadings on VAR coefficients (subject to L1 penalty)
-#'   \item \strong{L\_vech:} Lower-triangular elements of the Cholesky factor defining \eqn{\Omega}
-#'   \item \strong{Phi\_c:} Constant (if applicable) and lag-specific VAR coefficients
-#' }
-#'
-#' If a valid covariance matrix \code{fit$vcov} is available, the function reports
-#' standard errors, z-values, and two-sided normal p-values.  
-#' Otherwise, these columns are shown but contain \code{NA}.
-#'
-#' The model information block displays key metadata (estimation method, dimensions,
-#' sample size) and standard information criteria (AIC, AICc, BIC).
-#'
-#' @return
-#' Invisibly returns a list with the following elements:
-#' \describe{
-#'   \item{\code{info}}{Model metadata and ICs.}
-#'   \item{\code{params}}{Full parameter table with estimate, SE, z, and p.}
-#'   \item{\code{blocks}}{Named list of parameter subsets: scalars, Phi\_f, L\_vech, Phi\_c.}
-#' }
-#'
-#' @seealso [tvfit()], [tvpenfit()], [tvirf()], [tvpred()]
-#'
-#' @examples
-#' \dontrun{
-#' # Example with simulated 2x2 system
-#' data <- simdata$Y
-#' fit_ml <- tvfit(data, p = 1, r = 1, zero.mean = TRUE,
-#'                 phi_f_structure = matrix(1, 2, 2), method = "ML")
-#'
-#' # Print formatted summary
-#' summary(fit_ml)
-#'
-#' # Retrieve underlying tables
-#' s <- summary(fit_ml, print = FALSE)
-#' head(s$params)
-#'
-#' # Penalized version
-#' fit_pen <- tvpenfit(data, p = 1, r = 1, lambda_penalty = 0.05)
-#' summary(fit_pen)
-#' }
-#'
+#' @param fit A fitted \code{tvfit} object.
+#' @param digits Number of digits to display.
+#' @param print Logical; if TRUE, prints the summary to console.
+#' @return Invisibly returns a list with:
+#'   \itemize{
+#'     \item \code{info}: model information and ICs
+#'     \item \code{params}: full parameter table
+#'     \item \code{blocks}: block indices (for reference)
+#'   }
 #' @export
-summary.tvfit <- function(object, digits = 3, print = TRUE, ...) {
-  fit <- object # S3 generic method.
+summary.tvfit <- function(fit, digits = 3, print = TRUE) {
   stopifnot(is.list(fit), !is.null(fit$meta))
   
-  # parameter vector and vcov (works for ML/EM; penalized may be NA)
   theta <- fit$theta %||% fit$optim$par
   V     <- fit$vcov
   if (is.list(V) && !is.null(V$untransformed)) V <- V$untransformed
   
-  # build names & indices
   map  <- .tvvar_param_index(fit)
   npar <- length(map$names)
   
-  # pad/truncate theta if needed
+  # align lengths
   if (!length(theta) || length(theta) != npar) {
     theta <- theta[seq_len(min(length(theta), npar))]
-    if (length(theta) < npar) theta <- c(theta, rep(NA_real_, npar - length(theta)))
+    if (length(theta) < npar)
+      theta <- c(theta, rep(NA_real_, npar - length(theta)))
   }
   
-  # SE on unconstrained scale (if available)
   have_V <- is.matrix(V) && all(dim(V) == c(length(theta), length(theta)))
   se_raw <- if (have_V) sqrt(pmax(diag(V), 0)) else rep(NA_real_, length(theta))
   
-  # Start from raw (unconstrained) and create "natural" copies for scalars
   est_nat <- theta
   se_nat  <- se_raw
   
-  # Transform head scalars (A, B, phi_r) to (0,1) with delta-method SEs
+  # Transform head scalars to (0,1)
   idx <- map$idx
   if (length(idx$head)) {
     inv_logit <- stats::plogis
     h <- idx$head
-    p <- inv_logit(theta[h])          # natural-scale values
+    p <- inv_logit(theta[h])
     est_nat[h] <- p
     if (have_V) {
-      grad <- p * (1 - p)             # derivative of plogis
+      grad <- p * (1 - p)
       se_nat[h] <- se_raw[h] * grad
     }
   }
   
-  # z/p-values (use transformed SEs and estimates where applicable)
+  # z/p-values
   z   <- if (all(!is.na(se_nat))) est_nat / se_nat else rep(NA_real_, length(theta))
   pvl <- if (all(!is.na(z))) 2 * stats::pnorm(-abs(z)) else rep(NA_real_, length(theta))
   
-  # tidy param table (report "estimate" as: natural for head, raw for others)
+  # unified parameter table (with continuous numbering)
   params_df <- data.frame(
-    parameter = map$names,
+    parameter = seq_along(map$names),
+    name      = map$names,
     estimate  = est_nat,
     std.error = se_nat,
     z.value   = z,
@@ -213,15 +168,14 @@ summary.tvfit <- function(object, digits = 3, print = TRUE, ...) {
     stringsAsFactors = FALSE
   )
   
-  # split blocks for convenience
+  # use indices for grouping but keep order from map$names
   blocks <- list(
-    scalars = params_df[idx$head, , drop = FALSE],
-    Phi_f   = if (length(idx$phi_f)) params_df[idx$phi_f, , drop = FALSE] else NULL,
-    L_vech  = if (length(idx$L))     params_df[idx$L, , drop = FALSE] else NULL,
-    Phi_c   = if (length(idx$phi_c)) params_df[idx$phi_c, , drop = FALSE] else NULL
+    scalars = idx$head,
+    Phi_c   = idx$phi_c,
+    Phi_f   = idx$phi_f,
+    L_vech  = idx$L
   )
   
-  # ICs + runtime
   ic <- fit$ic %||% list()
   meta <- fit$meta %||% list()
   info_df <- data.frame(
@@ -236,27 +190,12 @@ summary.tvfit <- function(object, digits = 3, print = TRUE, ...) {
     if (requireNamespace("knitr", quietly = TRUE)) {
       cat("## Model info\n")
       print(knitr::kable(info_df, digits = digits, align = "l"))
-      cat("\n## Scalars (A, B, phi_r) on (0,1) scale\n")
-      print(knitr::kable(blocks$scalars, digits = digits))
-      if (!is.null(blocks$Phi_c)) {
-        cat("\n## Phi_c coefficients\n")
-        print(knitr::kable(blocks$Phi_c, digits = digits))
-      }
-      if (!is.null(blocks$Phi_f)) {
-        cat("\n## Phi_f (factor loadings on regressors)\n")
-        print(knitr::kable(blocks$Phi_f, digits = digits))
-      }
-      if (!is.null(blocks$L_vech)) {
-        cat("\n## vech(L) (Cholesky factor parameters for Omega)\n")
-        print(knitr::kable(blocks$L_vech, digits = digits))
-      }
+      cat("\n## Parameter estimates\n")
+      print(knitr::kable(params_df, digits = digits))
     } else {
       message("knitr not found; printing with base::print()")
       print(info_df)
-      print(blocks$scalars)
-      if (!is.null(blocks$Phi_c)) print(blocks$Phi_c)
-      if (!is.null(blocks$Phi_f)) print(blocks$Phi_f)
-      if (!is.null(blocks$L_vech)) print(blocks$L_vech)
+      print(params_df)
     }
   }
   
