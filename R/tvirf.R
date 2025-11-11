@@ -1,24 +1,38 @@
-#' Compute Impulse Response Functions (IRFs)
+#' Time-varying impulse response function (TVIRF)
 #'
-#' @description
-#' Computes time-varying impulse responses for fitted \code{tvfit} or \code{tvpenfit} models.
-#' For penalized models, confidence bands are omitted since parameter uncertainty is not well-defined.
+#' Computes Monte Carlo impulse responses for a fitted time-varying VAR model.
+#' For each specified horizon, it generates simulated responses to shocks at given
+#' positions in the system. Uncertainty bands are based on parameter draws.
 #'
-#' @param fit tvvar_fit
-#' @param lags horizon
-#' @param T.max number of time points (from start)
-#' @param B number of Monte Carlo draws
-#' @param shock_position numeric length-N shock vector (nonzeros indicate which series to shock)
-#' @return either a single IRF object (list with IRF_lb/med/ub + meta) or a
-#'         named list of such objects (one per shocked series), with
-#'         attr(*, "tvvar_irf_multi") = TRUE
+#' @param fit A fitted tvvar model object (from \code{tvfit()} or \code{tvpenfit()}).
+#' @param horizon Integer. Forecast horizon (number of steps ahead) over which to compute IRFs.
+#'   The function includes responses up to and including this number of steps.
+#' @param T.max Number of time points (from the start of the sample) at which to evaluate the IRFs.
+#' @param B Number of Monte Carlo draws used for uncertainty estimation.
+#' @param shock_index Integer index (1..N) of the shocked variable. Ignored if \code{shock_position} is supplied.
+#' @param shock_position Optional numeric vector of length N specifying the exact shock magnitudes
+#'   (non-zero entries indicate which series receive shocks).
+#'
+#' @return Either a single IRF object — a list with components
+#'   \code{IRF_lb}, \code{IRF_med}, \code{IRF_ub}, and \code{meta} —
+#'   or a named list of such objects (one per shocked series),
+#'   with attribute \code{attr(*, "tvvar_irf_multi")} set to \code{TRUE}.
+#'
+#' @details
+#' The function simulates the system’s response to a one-standard-deviation shock at the
+#' indicated variable(s), conditional on the estimated time-varying parameters.
+#' If multiple shocks are provided via \code{shock_position}, a joint IRF is computed.
+#' The horizon is fully inclusive: for example, \code{horizon = 10} produces responses
+#' at horizons 0 through 10.
+#'
 #' @importFrom MASS mvrnorm
 #' @export
 tvirf <- function(fit,
-                lags = 10,
-                T.max = 5,
-                B = 500,
-                shock_position = NULL) {
+                  horizon = 10,
+                  T.max = 5,
+                  B = 500,
+                  shock_index = 1,
+                  shock_position = NULL) {
   
   stopifnot(is.list(fit), !is.null(fit$meta))
   N <- fit$meta$N
@@ -26,7 +40,7 @@ tvirf <- function(fit,
   r <- fit$meta$r
   
   if (is.null(shock_position)) {
-    warning("`shock_position` not provided - defaulting to a unit shock in variable 1.")
+    warning("`shock_position` not provided — defaulting to a unit shock in variable 1.")
     shock_position <- rep(0, N)
     shock_position[1] <- 1
   } else {
@@ -57,9 +71,9 @@ tvirf <- function(fit,
       k <- shocked_ids[kk]  # which series to shock
       ek <- rep(0, N); ek[k] <- 1
       
-      IRF_lb  <- array(NA_real_, c(N, lags, T.max))
-      IRF_ub  <- array(NA_real_, c(N, lags, T.max))
-      IRF_med <- array(NA_real_, c(N, lags, T.max))
+      IRF_lb  <- array(NA_real_, c(N, horizon, T.max))
+      IRF_ub  <- array(NA_real_, c(N, horizon, T.max))
+      IRF_med <- array(NA_real_, c(N, horizon, T.max))
       
       for (t in 1:T.max) {
         T.index <- t
@@ -67,7 +81,7 @@ tvirf <- function(fit,
         V     <- fit$vcov
         s.h   <- k
         
-        irf       <- array(0, c(N, lags, B))
+        irf       <- array(0, c(N, horizon, B))
         Pi        <- array(0, c(N * p, N * p, B))
         ev        <- numeric()
         lyapunov  <- numeric()
@@ -121,7 +135,7 @@ tvirf <- function(fit,
           HT <- opti.eval$array.filtered.H[, , T.index]
           
           irf.gen <- irf_generator_cpp(Phi, psi, aT, PT, HT, ek,
-                                       lags, fixed = TRUE, B = B, seed_f = 1234)
+                                       horizon, fixed = TRUE, B = B, seed_f = 1234)
           
           irf[,,i] <- irf.gen$irf
           Pi[,,i]  <- irf.gen$PI
@@ -132,7 +146,7 @@ tvirf <- function(fit,
         if (length(unstable)) irf[,,unstable] <- NA_real_
         
         for (ii in 1:N) {
-          for (jj in 1:lags) {
+          for (jj in 1:horizon) {
             IRF_lb[ii, jj, t]  <- quantile(irf[ii, jj, ], probs = 0.16, na.rm = TRUE)
             IRF_ub[ii, jj, t]  <- quantile(irf[ii, jj, ], probs = 0.84, na.rm = TRUE)
             IRF_med[ii, jj, t] <- quantile(irf[ii, jj, ], probs = 0.50, na.rm = TRUE)
@@ -141,7 +155,7 @@ tvirf <- function(fit,
       }
       
       obj <- list(IRF_lb = IRF_lb, IRF_med = IRF_med, IRF_ub = IRF_ub,
-                  meta   = list(N = N, lags = lags, T.max = T.max,
+                  meta   = list(N = N, horizon = horizon, T.max = T.max,
                                 shock_var = k,
                                 shock_position = shock_position,
                                 method = "ML"))
@@ -200,9 +214,9 @@ tvirf <- function(fit,
       Phi[,,1] <- Phi_c_est
       for (j in seq_len(r)) Phi[,,j + 1] <- Phi_f_est[,,j]
       
-      IRF_lb  <- array(NA_real_, c(N, lags, T.max))
-      IRF_ub  <- array(NA_real_, c(N, lags, T.max))
-      IRF_med <- array(NA_real_, c(N, lags, T.max))
+      IRF_lb  <- array(NA_real_, c(N, horizon, T.max))
+      IRF_ub  <- array(NA_real_, c(N, horizon, T.max))
+      IRF_med <- array(NA_real_, c(N, horizon, T.max))
       
       set.seed(1234L)
       for (t in 1:T.max) {
@@ -210,11 +224,11 @@ tvirf <- function(fit,
         PT <- matrix(ev$filtered.state.variance[, , t, drop = FALSE], nrow = r, ncol = r)
         HT <- matrix(ev$array.filtered.H[, , t], nrow = N, ncol = N)
         
-        irf_draws <- array(NA_real_, c(N, lags, B))
+        irf_draws <- array(NA_real_, c(N, horizon, B))
         for (b in 1:B) {
           one <- irf_generator_cpp(
             Phi, psi, aT, PT, HT, ek,
-            lags = lags,
+            lags = horizon,
             fixed = TRUE,   # fixed coefficients; (factor sim would be fixed=FALSE if desired)
             B = 1,
             seed_f = 1000L * t + b
@@ -224,7 +238,7 @@ tvirf <- function(fit,
         
         if (is.finite(lyap_val) && lyap_val > 0) irf_draws[,] <- NA_real_
         
-        for (ii in 1:N) for (jj in 1:lags) {
+        for (ii in 1:N) for (jj in 1:horizon) {
           z <- irf_draws[ii, jj, ]
           IRF_lb[ii, jj, t]  <- stats::quantile(z, 0.16, na.rm = TRUE)
           IRF_med[ii, jj, t] <- stats::quantile(z, 0.50, na.rm = TRUE)
@@ -233,7 +247,7 @@ tvirf <- function(fit,
       }
       
       obj <- list(IRF_lb = IRF_lb, IRF_med = IRF_med, IRF_ub = IRF_ub,
-                  meta   = list(N = N, lags = lags, T.max = T.max,
+                  meta   = list(N = N, horizon = horizon, T.max = T.max,
                                 shock_var = k,
                                 shock_position = shock_position,
                                 method = fit$meta$method))
@@ -251,12 +265,10 @@ tvirf <- function(fit,
 }
 
 #' Plot IRFs (single or multiple shocks)
-#' @param x a `tvirf()` object (single IRF list or multi-shock list)
+#' @param irf_obj result of irf() (single IRF list or multi-shock list)
 #' @param t which time index to plot (default 1)
-#' @param ... Additional graphical arguments passed to lower-level plotting functions.
 #' @export
-plot.tvirf <- function(x, t = 1, ...) {
-  irf_obj <- x # S3 generic function
+plot.tvirf <- function(irf_obj, t = 1) {
   if (is.list(irf_obj) && !is.null(irf_obj$IRF_lb)) {
     # single object -> wrap as one-element list
     nm <- paste0("shock_", irf_obj$meta$shock_var %||% 1L)
@@ -274,9 +286,9 @@ plot.tvirf <- function(x, t = 1, ...) {
   # Basic dims from first entry
   first <- irf_obj[[1]]
   N     <- first$meta$N
-  lags  <- first$meta$lags
+  horizon  <- first$meta$horizon
   S     <- length(irf_obj)                # number of shocks to show (relevant only)
-  H     <- 0:(lags - 1)                   # horizons
+  H     <- 0:(horizon - 1)                   # horizons
   
   # Layout: rows = responders (1..N), cols = shocks (the ones you requested)
   op <- par(mfrow = c(N, S), mgp = c(2, 0.8, 0), mar = 0.1 + c(3, 3, 3, 1))
@@ -306,10 +318,10 @@ plot.tvirf <- function(x, t = 1, ...) {
       # Title: response-by-shock
       main_lbl <- sprintf("Response y%d to shock y%d (t=%d)", i, kshock, t)
       
-      plot(0:(lags - 1), md, type = "l", lwd = 2, xlab = "Horizon", ylab = "",
+      plot(0:(horizon - 1), md, type = "l", lwd = 2, xlab = "Horizon", ylab = "",
            ylim = ylim, main = main_lbl)
-      if (!all(is.na(lb))) lines(0:(lags - 1), lb, lty = "dashed")
-      if (!all(is.na(ub))) lines(0:(lags - 1), ub, lty = "dashed")
+      if (!all(is.na(lb))) lines(0:(horizon - 1), lb, lty = "dashed")
+      if (!all(is.na(ub))) lines(0:(horizon - 1), ub, lty = "dashed")
       abline(h = 0, col = "grey40")
     }
   }
