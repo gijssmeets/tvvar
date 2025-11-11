@@ -36,7 +36,7 @@ tvpenfit(
 \item{init_list}{Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)}
 }
 \value{
-Object of class \code{tvvar_fit}, same structure as from \code{tvfit()}
+Object of class \code{tvfit}, same structure as from \code{tvfit()}
 }
 \description{
 Fits a penalized time-varying VAR (TV-VAR) model using the ECM algorithm.

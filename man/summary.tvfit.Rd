@@ -2,72 +2,27 @@
 % Please edit documentation in R/util.R
 \name{summary.tvfit}
 \alias{summary.tvfit}
-\title{Summarize a time-varying VAR fit}
+\title{Summarize a fitted tvfit model}
 \usage{
-\method{summary}{tvfit}(object, digits = 3, print = TRUE, ...)
+\method{summary}{tvfit}(fit, digits = 3, print = TRUE)
 }
 \arguments{
-\item{object}{A fitted object of class \code{tvfit}, returned by \code{\link[=tvfit]{tvfit()}} or \code{\link[=tvpenfit]{tvpenfit()}}.}
+\item{fit}{A fitted \code{tvfit} object.}
 
-\item{digits}{Integer; number of decimal digits for printed output (default = 3).}
+\item{digits}{Number of digits to display.}
 
-\item{print}{Logical; if \code{TRUE} (default), prints formatted tables
-(using \pkg{knitr} if available). If \code{FALSE}, returns the underlying
-data frames invisibly.}
-
-\item{...}{Additional arguments (currently ignored).}
+\item{print}{Logical; if TRUE, prints the summary to console.}
 }
 \value{
-Invisibly returns a list with the following elements:
-\describe{
-\item{\code{info}}{Model metadata and ICs.}
-\item{\code{params}}{Full parameter table with estimate, SE, z, and p.}
-\item{\code{blocks}}{Named list of parameter subsets: scalars, Phi\_f, L\_vech, Phi\_c.}
+Invisibly returns a list with:
+\itemize{
+\item \code{info}: model information and ICs
+\item \code{params}: full parameter table
+\item \code{blocks}: block indices (for reference)
 }
 }
 \description{
-Produces a formatted summary table for a fitted time-varying VAR model estimated
-via ML, EM, or penalized ECM.
-The summary includes point estimates, (optional) standard errors, z-statistics,
-and p-values, plus model information criteria and runtime.
-It supports all model objects created by \code{\link[=tvfit]{tvfit()}} and \code{\link[=tvpenfit]{tvpenfit()}}.
-}
-\details{
-The output separates parameters into four logical groups:
-\itemize{
-\item \strong{Scalars:} A, B, and factor persistence parameters (\eqn{\phi_r})
-\item \strong{Phi\_f:} Factor loadings on VAR coefficients (subject to L1 penalty)
-\item \strong{L\_vech:} Lower-triangular elements of the Cholesky factor defining \eqn{\Omega}
-\item \strong{Phi\_c:} Constant (if applicable) and lag-specific VAR coefficients
-}
-
-If a valid covariance matrix \code{fit$vcov} is available, the function reports
-standard errors, z-values, and two-sided normal p-values.
-Otherwise, these columns are shown but contain \code{NA}.
-
-The model information block displays key metadata (estimation method, dimensions,
-sample size) and standard information criteria (AIC, AICc, BIC).
-}
-\examples{
-\dontrun{
-# Example with simulated 2x2 system
-data <- simdata$Y
-fit_ml <- tvfit(data, p = 1, r = 1, zero.mean = TRUE,
-                phi_f_structure = matrix(1, 2, 2), method = "ML")
-
-# Print formatted summary
-summary(fit_ml)
-
-# Retrieve underlying tables
-s <- summary(fit_ml, print = FALSE)
-head(s$params)
-
-# Penalized version
-fit_pen <- tvpenfit(data, p = 1, r = 1, lambda_penalty = 0.05)
-summary(fit_pen)
-}
-
-}
-\seealso{
-\code{\link[=tvfit]{tvfit()}}, \code{\link[=tvpenfit]{tvpenfit()}}, \code{\link[=tvirf]{tvirf()}}, \code{\link[=tvpred]{tvpred()}}
+Provides formatted parameter estimates, standard errors, z-values, and p-values
+for a fitted \code{tvfit} object. Parameters are reported in their original order,
+ensuring continuous numbering across blocks.
 }

@@ -2,55 +2,91 @@
 % Please edit documentation in R/tvpred.R
 \name{plot.tvpred}
 \alias{plot.tvpred}
-\title{Plot forecasts with optional history and forecast boundary marker}
+\title{Plot forecasts from a tvpred object}
 \usage{
 \method{plot}{tvpred}(
   x,
   var = NULL,
+  hist_y = NULL,
+  hist_time = NULL,
   hist_n = 50,
   main = NULL,
-  ci_col = "grey80",
+  ci_col68 = "grey75",
+  ci_col95 = "grey90",
   line_col = "steelblue",
   hist_col = "black",
   connect_col = NULL,
   vline_col = "grey40",
   vline_lty = 2,
-  show_median = TRUE,
-  y_hist = NULL,
   ...
 )
 }
 \arguments{
-\item{x}{a \code{tvpred()} object. Must contain
-\code{median} or \code{mean} (Nxh or hxN), optional \code{lb}/\code{ub}, and \code{data} (TxN).}
+\item{x}{A \code{tvpred} object returned by \code{predict.tvfit()}.}
 
-\item{var}{integer vector of variables to plot (1..N). Default \code{NULL} = all.}
+\item{var}{Integer vector of variables to plot (1..N). Default = all.}
 
-\item{hist_n}{number of last historical observations to show (default 50).}
+\item{hist_y}{Optional historical data (T×N matrix or vector) corresponding to the fitted sample.}
 
-\item{main}{optional overall title (used in base mode).}
+\item{hist_time}{Optional vector giving time indices or dates for the x-axis.
+Acceptable formats include a \code{Date} vector
+(e.g. \code{seq(as.Date("2000-01-01"), by = "month", length.out = T)}),
+a \code{POSIXct} vector for high-frequency data, or a numeric sequence.
+When provided, the function automatically uses the last \code{hist_n} values
+and extends by \code{h} additional periods using the same spacing.}
 
-\item{ci_col}{shading color for confidence band.}
+\item{hist_n}{Number of last historical observations to display (default = 50).}
 
-\item{line_col}{color for forecast line.}
+\item{main}{Optional plot title.}
 
-\item{hist_col}{color for history line.}
+\item{ci_col68}{Color for the 68\\% prediction interval shading (default = "grey75").}
 
-\item{connect_col}{color for connecting line (default same as forecast line).}
+\item{ci_col95}{Color for the 95\\% prediction interval shading (default = "grey90").}
 
-\item{vline_col}{color for vertical split line (default grey40).}
+\item{line_col}{Color for the forecast line (default = "steelblue").}
 
-\item{vline_lty}{linetype for split (default dotted, 2).}
+\item{hist_col}{Color for the historical line (default = "black").}
 
-\item{show_median}{logical; if TRUE and \code{fc$median} exists, plot medians; else means.}
+\item{connect_col}{Color for the line connecting history and forecast (default = same as forecast line).}
 
-\item{y_hist}{optional history override. If supplied, can be a vector (T) for
-a single series or a matrix (TxN) matching \code{fc$data}.}
+\item{vline_col}{Color for the vertical line marking the forecast start (default = "grey40").}
+
+\item{vline_lty}{Linetype for the vertical line (default = 2, dotted).}
 
 \item{...}{Additional graphical arguments passed to lower-level plotting functions.}
 }
 \description{
-Plots forecasted means or medians (with CI if available), shows recent history,
-and adds a vertical line at the forecast start. By default (\code{var = NULL}) it
-plots all variables (one panel per series, vertically stacked).
+Visualizes forecasts produced by \code{predict.tvfit()}, showing both 68\\% and 95\\%
+prediction intervals (with lighter shading for the 95\\% band). Displays the last
+\code{hist_n} observations from the historical sample alongside the forecast horizon.
+}
+\details{
+If a time index is provided via \code{hist_time}, it will be used to label the x-axis and
+automatically extended for the forecast horizon using the same spacing (e.g. monthly or yearly).
+Otherwise, integer indices (1, 2, …) are used for both historical and forecast periods.
+
+\preformatted{
+  plot.tvpred(x, var = NULL, hist_y = NULL, hist_time = NULL,
+              hist_n = 50, main = NULL,
+              ci_col68 = "grey75", ci_col95 = "grey90",
+              line_col = "steelblue", hist_col = "black",
+              connect_col = NULL, vline_col = "grey40",
+              vline_lty = 2, ...)
+}
+
+Time-axis handling:
+\itemize{
+\item If \code{hist_time} is of class \code{Date} or \code{POSIXct}, the function infers
+the spacing from the median difference and extends the forecast horizon accordingly.
+\item If \code{hist_time} is numeric or missing, the x-axis defaults to integer indices.
+}
+}
+\examples{
+\dontrun{
+simdata$date <- seq(as.Date("2020-01-01"), by = "month", length.out = nrow(simdata$Y))
+fit  <- tvfit(simdata$Y)
+pred <- predict(fit, h = 12)
+plot(pred, hist_y = simdata$Y, hist_time = simdata$date)
+}
+
 }

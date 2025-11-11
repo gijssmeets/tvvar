@@ -2,27 +2,59 @@
 % Please edit documentation in R/tvirf.R
 \name{tvirf}
 \alias{tvirf}
-\title{Compute Impulse Response Functions (IRFs)}
+\title{Time-varying impulse response function (TVIRF)}
 \usage{
-tvirf(fit, lags = 10, T.max = 5, B = 500, shock_position = NULL)
+tvirf(
+  fit,
+  horizon = 10,
+  T.max = 5,
+  B = 500,
+  shock_index = 1,
+  shock_position = NULL
+)
 }
 \arguments{
-\item{fit}{tvvar_fit}
+\item{fit}{Fitted tvvar model object (from \code{tvfit()} or \code{tvpenfit()}).}
 
-\item{lags}{horizon}
+\item{horizon}{Integer; forecast horizon (number of steps ahead, default = 10).
+Responses are reported up to and including this horizon.}
 
-\item{T.max}{number of time points (from start)}
+\item{T.max}{Integer; number of time points (from the start of the sample)
+at which to evaluate the IRFs (default = 5).}
 
-\item{B}{number of Monte Carlo draws}
+\item{B}{Integer; number of Monte Carlo draws for uncertainty estimation
+(default = 500).}
 
-\item{shock_position}{numeric length-N shock vector (nonzeros indicate which series to shock)}
+\item{shock_index}{Integer (1..N) index of the shocked variable
+(default = 1). Ignored if \code{shock_position} is given.}
+
+\item{shock_position}{Optional numeric vector of length N specifying the exact shock
+magnitudes. Non-zero entries indicate which series receive shocks.}
 }
 \value{
-either a single IRF object (list with IRF_lb/med/ub + meta) or a
-named list of such objects (one per shocked series), with
-attr(*, "tvvar_irf_multi") = TRUE
+Either a single IRF object — a list with components
+\code{IRF_lb}, \code{IRF_med}, \code{IRF_ub}, and \code{meta} —
+or a named list of such objects (one per shocked series),
+with attribute \code{attr(*, "tvvar_irf_multi")} set to \code{TRUE}.
 }
 \description{
-Computes time-varying impulse responses for fitted \code{tvfit} or \code{tvpenfit} models.
-For penalized models, confidence bands are omitted since parameter uncertainty is not well-defined.
+Computes Monte Carlo impulse responses for a fitted time-varying VAR model:
+}
+\details{
+\preformatted{
+  tvirf(fit, horizon = 10, T.max = 5, B = 500,
+        shock_index = 1, shock_position = NULL)
+}
+
+The function generates simulated responses to structural shocks over the given
+forecast horizon, for a set of time points in the sample. Uncertainty bands are
+computed from Monte Carlo parameter draws (for unpenalized fits).
+
+The function simulates the system’s dynamic response to a one-standard-deviation shock
+(or user-specified magnitudes) at the indicated variable(s), conditional on the
+time-varying parameter estimates. If multiple nonzero shocks are supplied in
+\code{shock_position}, a joint IRF is computed.
+
+The horizon is \strong{inclusive}: for example, \code{horizon = 10} returns responses
+for horizons 0 through 10.
 }

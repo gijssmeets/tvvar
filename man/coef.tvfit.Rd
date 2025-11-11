@@ -2,34 +2,29 @@
 % Please edit documentation in R/tvfit.R
 \name{coef.tvfit}
 \alias{coef.tvfit}
-\title{Extract coefficients from a fitted tvfit model}
+\title{Extract all coefficients from a tvfit model}
 \usage{
-\method{coef}{tvfit}(object, ...)
+\method{coef}{tvfit}(object, digits = 6, ...)
 }
 \arguments{
 \item{object}{A fitted object of class \code{"tvfit"}.}
 
-\item{...}{Not used (for S3 compatibility).}
+\item{digits}{Number of digits to round for display (default 6).}
+
+\item{...}{Ignored; for S3 compatibility.}
 }
 \value{
 A data frame with columns:
 \itemize{
-\item \code{name}: parameter name.
-\item \code{estimate}: point estimate.
-\item \code{se}: standard error (if available).
-\item \code{z}: z-statistic (if available).
-\item \code{p}: p-value (if available).
+\item \code{parameter} — parameter name
+\item \code{estimate} — estimated value (transformed for scalar parameters)
+\item \code{std.error} — standard error (if available)
+\item \code{z.value} — z-statistic (if applicable)
+\item \code{p.value} — p-value (if applicable)
 }
-If standard errors are unavailable, only the estimate column is filled.
 }
 \description{
-Returns all estimated coefficients from a \code{tvfit} object in a single, tidy data frame.
-This complements \code{summary.tvfit()}, which shows separated tables in the console.
-}
-\examples{
-\dontrun{
-fit <- tvfit(simdata$Y, p = 1, r = 1)
-head(coef(fit))
-}
-
+Returns all estimated coefficients from a fitted \code{tvfit} object as one
+consolidated table. Unlike \code{summary.tvfit()}, this method does not print
+block sections — it merges all parameter groups into a single data frame.
 }

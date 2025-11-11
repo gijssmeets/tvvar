@@ -4,14 +4,12 @@
 \alias{plot.tvirf}
 \title{Plot IRFs (single or multiple shocks)}
 \usage{
-\method{plot}{tvirf}(x, t = 1, ...)
+\method{plot}{tvirf}(irf_obj, t = 1)
 }
 \arguments{
-\item{x}{a \code{tvirf()} object (single IRF list or multi-shock list)}
+\item{irf_obj}{result of irf() (single IRF list or multi-shock list)}
 
 \item{t}{which time index to plot (default 1)}
-
-\item{...}{Additional graphical arguments passed to lower-level plotting functions.}
 }
 \description{
 Plot IRFs (single or multiple shocks)
