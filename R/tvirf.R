@@ -71,9 +71,9 @@ tvirf <- function(fit,
       k <- shocked_ids[kk]  # which series to shock
       ek <- rep(0, N); ek[k] <- 1
       
-      IRF_lb  <- array(NA_real_, c(N, horizon, T.max))
-      IRF_ub  <- array(NA_real_, c(N, horizon, T.max))
-      IRF_med <- array(NA_real_, c(N, horizon, T.max))
+      IRF_lb  <- array(NA_real_, c(N, horizon + 1, T.max))
+      IRF_ub  <- array(NA_real_, c(N, horizon + 1, T.max))
+      IRF_med <- array(NA_real_, c(N, horizon + 1, T.max))
       
       for (t in 1:T.max) {
         T.index <- t
@@ -81,7 +81,7 @@ tvirf <- function(fit,
         V     <- fit$vcov
         s.h   <- k
         
-        irf       <- array(0, c(N, horizon, B))
+        irf       <- array(0, c(N, horizon + 1, B))
         Pi        <- array(0, c(N * p, N * p, B))
         ev        <- numeric()
         lyapunov  <- numeric()
@@ -135,7 +135,7 @@ tvirf <- function(fit,
           HT <- opti.eval$array.filtered.H[, , T.index]
           
           irf.gen <- irf_generator_cpp(Phi, psi, aT, PT, HT, ek,
-                                       horizon, fixed = TRUE, B = B, seed_f = 1234)
+                                       horizon + 1, fixed = TRUE, B = B, seed_f = 1234)
           
           irf[,,i] <- irf.gen$irf
           Pi[,,i]  <- irf.gen$PI
@@ -146,7 +146,7 @@ tvirf <- function(fit,
         if (length(unstable)) irf[,,unstable] <- NA_real_
         
         for (ii in 1:N) {
-          for (jj in 1:horizon) {
+          for (jj in 1:(horizon + 1)) {
             IRF_lb[ii, jj, t]  <- quantile(irf[ii, jj, ], probs = 0.16, na.rm = TRUE)
             IRF_ub[ii, jj, t]  <- quantile(irf[ii, jj, ], probs = 0.84, na.rm = TRUE)
             IRF_med[ii, jj, t] <- quantile(irf[ii, jj, ], probs = 0.50, na.rm = TRUE)
@@ -214,9 +214,9 @@ tvirf <- function(fit,
       Phi[,,1] <- Phi_c_est
       for (j in seq_len(r)) Phi[,,j + 1] <- Phi_f_est[,,j]
       
-      IRF_lb  <- array(NA_real_, c(N, horizon, T.max))
-      IRF_ub  <- array(NA_real_, c(N, horizon, T.max))
-      IRF_med <- array(NA_real_, c(N, horizon, T.max))
+      IRF_lb  <- array(NA_real_, c(N, horizon + 1, T.max))
+      IRF_ub  <- array(NA_real_, c(N, horizon + 1, T.max))
+      IRF_med <- array(NA_real_, c(N, horizon + 1, T.max))
       
       set.seed(1234L)
       for (t in 1:T.max) {
@@ -224,11 +224,11 @@ tvirf <- function(fit,
         PT <- matrix(ev$filtered.state.variance[, , t, drop = FALSE], nrow = r, ncol = r)
         HT <- matrix(ev$array.filtered.H[, , t], nrow = N, ncol = N)
         
-        irf_draws <- array(NA_real_, c(N, horizon, B))
+        irf_draws <- array(NA_real_, c(N, horizon + 1, B))
         for (b in 1:B) {
           one <- irf_generator_cpp(
             Phi, psi, aT, PT, HT, ek,
-            lags = horizon,
+            lags = horizon + 1,
             fixed = TRUE,   # fixed coefficients; (factor sim would be fixed=FALSE if desired)
             B = 1,
             seed_f = 1000L * t + b
@@ -238,7 +238,7 @@ tvirf <- function(fit,
         
         if (is.finite(lyap_val) && lyap_val > 0) irf_draws[,] <- NA_real_
         
-        for (ii in 1:N) for (jj in 1:horizon) {
+        for (ii in 1:N) for (jj in 1:(horizon+1)) {
           z <- irf_draws[ii, jj, ]
           IRF_lb[ii, jj, t]  <- stats::quantile(z, 0.16, na.rm = TRUE)
           IRF_med[ii, jj, t] <- stats::quantile(z, 0.50, na.rm = TRUE)
@@ -286,7 +286,7 @@ plot.tvirf <- function(irf_obj, t = 1) {
   # Basic dims from first entry
   first <- irf_obj[[1]]
   N     <- first$meta$N
-  horizon  <- first$meta$horizon
+  horizon  <- first$meta$horizon + 1
   S     <- length(irf_obj)                # number of shocks to show (relevant only)
   H     <- 0:(horizon - 1)                   # horizons
   
