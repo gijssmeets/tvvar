@@ -52,7 +52,7 @@ tvpenfit <- function(data,
   
   ## --- check id factor.structure ----
   if (!is.null(factor.structure)) {
-    ok_id <- check_identification(factor.structure, dim.VAR = N,
+    ok_id <- check_identification(factor.structure, dim.VAR = ncol(Y),
                                   number.factors = r, lag.order = p)
     if (!ok_id) stop("The specified factor.structure is not identified. 
                    Ensure Λ₀ is lower-triangular with positive diagonal.")
