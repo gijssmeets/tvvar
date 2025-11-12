@@ -91,13 +91,8 @@
 #' @param p Integer VAR lag order.
 #' @param r Integer number of latent factors (state dimension).
 #' @param zero.mean Logical; if \code{TRUE}, intercepts in \eqn{\Phi^c} are fixed at 0.
-#' @param factor.structure Free pattern for \eqn{\Phi^f}. One of:
-#'   \itemize{
-#'     \item 3D array \code{[N, N, r]} (one \eqn{N \times N} slice per factor),
-#'     \item list of \code{r} \code{N x N} matrices,
-#'     \item block matrix \code{N x (N*r)} (concatenated by columns).
-#'   }
-#'   Use ones for “free”, zeros for “fixed at 0”.
+#' @param factor_structure Specification of the factor loading structure Φᶠ.
+#'   See \code{\link{tvpenfit}} for details on accepted forms and identification restrictions.
 #' @param method One of \code{"ML"} (direct BFGS on likelihood) or \code{"EM"}.
 #' @param control List of optimizer controls passed to ML (e.g. \code{list(maxit=2000, trace=0)}).
 #' @param em_control List of EM controls
