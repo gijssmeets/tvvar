@@ -813,3 +813,64 @@ check_identification <- function(Phi.f, dim.VAR, number.factors, lag.order) {
   }
   return(identified)
 }
+
+#' @keywords internal
+#' @noRd
+init.factor.structure <- function(dim.VAR, number.factors, lag.order) {
+  
+  # Get key dimensions
+  r <- number.factors
+  N <- dim.VAR
+  p <- lag.order
+  
+  # --- Step 1: Create the target Delta_r matrix with 1s and 0s ---
+  # This enforces the lower-triangular identification scheme.
+  Delta_r <- matrix(0, nrow = r, ncol = r)
+  Delta_r[lower.tri(Delta_r, diag = TRUE)] <- 1
+  
+  
+  # --- Step 2: Build the full Delta matrix for the lag coefficients ---
+  # The dimensions here are only for the lag coefficients, not the intercept.
+  full_delta_rows <- N * (N * p)
+  Delta_full <- matrix(1, nrow = full_delta_rows, ncol = r)
+  Delta_full[1:r, ] <- Delta_r
+  
+  
+  # --- Step 3: Reshape Delta back into the 3D Phi array (without intercept) ---
+  Phi_f_3D_no_intercept <- array(0, dim = c(N, N * p, r))
+  for (j in 1:r) {
+    Phi_f_3D_no_intercept[, , j] <- matrix(Delta_full[, j], nrow = N, ncol = N * p)
+  }
+  
+  
+  # --- Step 4: Create the final 3D array including the zero intercept column ---
+  # This mimics the formatting behavior of your `make.Phi.f` function.
+  final_cols <- N * p + 1
+  Phi_f_array <- array(0, dim = c(N, final_cols, r))
+  
+  for (j in 1:r) {
+    # The first column is the restricted intercept (all zeros).
+    # The remaining columns are filled with the lag coefficients from the structure.
+    Phi_f_array[, , j] <- cbind(rep(0, N), Phi_f_3D_no_intercept[, , j])
+  }
+  
+  
+  # --- Step 5: Generate the other required output formats ---
+  
+  # Flatten the 3D array into a single vector
+  Phi_f_vector <- as.vector(Phi_f_array)
+  
+  # Create the 2D matrix version, which matches your 'Phi.f.array.mat.structure'
+  Phi_f_structure_matrix <- matrix(Phi_f_vector, nrow = dim.VAR)
+  
+  
+  # --- Step 6: Return all formatted structures in a list ---
+  return(
+    list(
+      Phi_f_array = Phi_f_array,
+      Phi_f_structure_matrix = Phi_f_structure_matrix,
+      Phi_f_vector = Phi_f_vector,
+      Delta_r = Delta_r
+    )
+  )
+}
