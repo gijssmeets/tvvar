@@ -23,8 +23,7 @@
 #'   using \code{\link{make_Phi_f_structure}()}, but the user may provide a
 #'   custom one (for example, to impose specific sparsity or factor loadings).
 #'
-#'   The function automatically calls \code{\link{check_identification}()} to verify
-#'   the validity of any user-supplied structure.
+#'   The function automatically verifies the validity of any user-supplied structure.
 #'
 #' @details
 #' Identification follows Theorem 2.1 in Gorgi et al. (2024).

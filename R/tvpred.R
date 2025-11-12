@@ -1,30 +1,46 @@
 #' Forecast from a fitted tvfit model
 #'
-#' @description
-#' Generates multi-step forecasts from a fitted time-varying VAR model.
-#' Supports both unpenalized and penalized fits. Allows choice of point
-#' forecast type (mean or median) and returns both 68% and 95% intervals.
+#' Generates multi-step forecasts from a fitted time-varying VAR model
+#' (either unpenalized or penalized). Provides both 68% and 95% prediction
+#' intervals and allows the user to choose between mean or median point forecasts.
 #'
-#' @param object A fitted \code{tvfit} or \code{tvpenfit} object.
-#' @param h Integer, forecast horizon.
-#' @param B Number of Monte Carlo forecast paths.
-#' @param seed Optional random seed.
-#' @param point Character, either \code{"mean"} or \code{"median"} for the central forecast.
-#' @param use_param_draws Logical; ignored for penalized fits.
-#' @return An object of class \code{tvpred} with elements:
+#' \preformatted{
+#'   predict.tvfit(object, h = 8, B = 500, seed = NULL,
+#'                 point = c("mean", "median"),
+#'                 use_param_draws = TRUE)
+#' }
+#'
+#'
+#' @param object          Fitted \code{tvfit} or \code{tvpenfit} object.
+#' @param h               Integer; forecast horizon (number of steps ahead, default = 8).
+#' @param B               Integer; number of Monte Carlo forecast paths (default = 500).
+#' @param seed            Optional integer seed for reproducibility (default = NULL).
+#' @param point           Character; type of point forecast:
+#'                        either \code{"mean"} or \code{"median"} (default = "mean").
+#' @param use_param_draws Logical; if \code{TRUE} (default), parameter uncertainty
+#'                        is incorporated via draws from the asymptotic covariance
+#'                        matrix. Ignored for penalized fits.
+#'
+#' @return A \code{tvpred} object containing:
 #' \itemize{
-#'   \item \code{point} — mean or median forecast (N × h)
+#'   \item \code{point} — mean or median forecast matrix (N × h)
 #'   \item \code{lb68}, \code{ub68} — 68% interval bounds
 #'   \item \code{lb95}, \code{ub95} — 95% interval bounds
-#'   \item \code{meta} — list with N, h, B, method, and point type.
+#'   \item \code{meta} — list with metadata (\code{N}, \code{h}, \code{B}, method, and point type)
 #' }
+#'
+#' @details
+#' For unpenalized fits, forecasts include parameter uncertainty via random draws
+#' from the estimated parameter covariance. For penalized fits, coefficients are
+#' fixed, and uncertainty reflects only factor and shock simulation.
+#'
 #' @export
 predict.tvfit <- function(object,
-                   h = 8,
-                   B = 500,
-                   seed = NULL,
-                   point = c("mean", "median"),
-                   use_param_draws = TRUE) {
+                          h = 8,
+                          B = 500,
+                          seed = NULL,
+                          point = c("mean", "median"),
+                          use_param_draws = TRUE) {
   point <- match.arg(point)
   if (!is.null(seed)) set.seed(seed)
   
@@ -168,55 +184,57 @@ predict.tvfit <- function(object,
 }
 
 
-
 #' Plot forecasts from a tvpred object
 #'
-#' Visualizes forecasts produced by \code{predict.tvfit()}, showing both 68\% and 95\% prediction intervals
-#' (with lighter shading for the 95\% band). The plot displays the last \code{hist_n} observations of the
-#' historical sample together with the forecast horizon.
+#' Visualizes forecasts produced by \code{predict.tvfit()}, showing both 68\% and 95\%
+#' prediction intervals (with lighter shading for the 95\% band). Displays the last
+#' \code{hist_n} observations from the historical sample alongside the forecast horizon.
 #'
-#' If a time index is supplied through \code{hist_time}, it will be used to label the x-axis and to extend
-#' the forecast horizon automatically by the same spacing (e.g. monthly or yearly). Otherwise, a simple
-#' numeric index (1, 2, …) is used for both history and forecast periods.
+#' If a time index is provided via \code{hist_time}, it will be used to label the x-axis and
+#' automatically extended for the forecast horizon using the same spacing (e.g. monthly or yearly).
+#' Otherwise, integer indices (1, 2, …) are used for both historical and forecast periods.
 #'
-#' @param x A `tvpred` object returned by \code{predict.tvfit()}.
+#' \preformatted{
+#'   plot.tvpred(x, var = NULL, hist_y = NULL, hist_time = NULL,
+#'               hist_n = 50, main = NULL,
+#'               ci_col68 = "grey75", ci_col95 = "grey90",
+#'               line_col = "steelblue", hist_col = "black",
+#'               connect_col = NULL, vline_col = "grey40",
+#'               vline_lty = 2, ...)
+#' }
+#'
+#' @param x A \code{tvpred} object returned by \code{predict.tvfit()}.
 #' @param var Integer vector of variables to plot (1..N). Default = all.
 #' @param hist_y Optional historical data (T×N matrix or vector) corresponding to the fitted sample.
-#' @param hist_time Optional vector of time indices or dates for the x-axis. 
-#'   Can be one of:
-#'   \itemize{
-#'     \item A \code{Date} vector, e.g. \code{seq(as.Date("2000-01-01"), by = "month", length.out = T)}.
-#'     \item A \code{POSIXct} vector for higher-frequency data (e.g. daily or intraday).
-#'     \item A numeric sequence representing time steps.
-#'   }
-#'   When provided, the function automatically takes the last \code{hist_n} values and
-#'   generates \code{h} additional time points beyond the final observed date using the same spacing.
-#' @param hist_n Number of last historical points to display (default = 50).
-#' @param main Optional overall plot title.
+#' @param hist_time Optional vector giving time indices or dates for the x-axis.
+#'   Acceptable formats include a \code{Date} vector
+#'   (e.g. \code{seq(as.Date("2000-01-01"), by = "month", length.out = T)}),
+#'   a \code{POSIXct} vector for high-frequency data, or a numeric sequence.
+#'   When provided, the function automatically uses the last \code{hist_n} values
+#'   and extends by \code{h} additional periods using the same spacing.
+#' @param hist_n Number of last historical observations to display (default = 50).
+#' @param main Optional plot title.
 #' @param ci_col68 Color for the 68\% prediction interval shading (default = "grey75").
 #' @param ci_col95 Color for the 95\% prediction interval shading (default = "grey90").
 #' @param line_col Color for the forecast line (default = "steelblue").
 #' @param hist_col Color for the historical line (default = "black").
-#' @param connect_col Color for the connecting line between history and forecast 
-#'   (default = same as forecast line).
-#' @param vline_col Color for the vertical line at forecast start (default = "grey40").
+#' @param connect_col Color for the line connecting history and forecast (default = same as forecast line).
+#' @param vline_col Color for the vertical line marking the forecast start (default = "grey40").
 #' @param vline_lty Linetype for the vertical line (default = 2, dotted).
 #' @param ... Additional graphical arguments passed to lower-level plotting functions.
 #'
 #' @details
-#' The time index handling works as follows:
+#' Time-axis handling:
 #' \itemize{
-#'   \item If \code{hist_time} is provided and of class \code{Date} or \code{POSIXct}, 
-#'     the function infers the frequency (e.g. daily, monthly, yearly) from the median spacing 
-#'     and extends the forecast horizon accordingly.
-#'   \item If no \code{hist_time} is provided, the function defaults to integer indices.
+#'   \item If \code{hist_time} is of class \code{Date} or \code{POSIXct}, the function infers
+#'         the spacing from the median difference and extends the forecast horizon accordingly.
+#'   \item If \code{hist_time} is numeric or missing, the x-axis defaults to integer indices.
 #' }
 #'
 #' @examples
 #' \dontrun{
-#' # Example with simulated monthly data
 #' simdata$date <- seq(as.Date("2020-01-01"), by = "month", length.out = nrow(simdata$Y))
-#' fit <- tvfit(simdata$Y)
+#' fit  <- tvfit(simdata$Y)
 #' pred <- predict(fit, h = 12)
 #' plot(pred, hist_y = simdata$Y, hist_time = simdata$date)
 #' }

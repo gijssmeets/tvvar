@@ -796,18 +796,8 @@ optim_pphi_bfgs <- function(opti.eval.em, cfg) {
   }
 }
 
-#' Check identification of a Phi^f (factor loading) structure
-#'
-#' Ensures that the specified factor loading structure satisfies
-#' the identification restrictions of the CH-DFVAR model.
-#'
-#' @param Phi.f Vector or array representation of Φᶠ.
-#' @param dim.VAR Number of observed variables (N).
-#' @param number.factors Number of dynamic factors (r).
-#' @param lag.order Lag order (p).
-#'
-#' @return Logical; TRUE if identified. Also issues an informative message.
-#' @export
+#' @keywords internal
+#' @noRd
 check_identification <- function(Phi.f, dim.VAR, number.factors, lag.order) {
   Phi_f_3D <- array(Phi.f, dim = c(dim.VAR, dim.VAR * lag.order, number.factors))
   Delta <- matrix(NA, nrow = dim.VAR^2 * lag.order, ncol = number.factors)
