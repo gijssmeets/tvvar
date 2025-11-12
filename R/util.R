@@ -795,3 +795,31 @@ optim_pphi_bfgs <- function(opti.eval.em, cfg) {
     return(optim_result$par)
   }
 }
+
+#' Check identification of a Phi^f (factor loading) structure
+#'
+#' Ensures that the specified factor loading structure satisfies
+#' the identification restrictions of the CH-DFVAR model.
+#'
+#' @param Phi.f Vector or array representation of Φᶠ.
+#' @param dim.VAR Number of observed variables (N).
+#' @param number.factors Number of dynamic factors (r).
+#' @param lag.order Lag order (p).
+#'
+#' @return Logical; TRUE if identified. Also issues an informative message.
+#' @export
+check_identification <- function(Phi.f, dim.VAR, number.factors, lag.order) {
+  Phi_f_3D <- array(Phi.f, dim = c(dim.VAR, dim.VAR * lag.order, number.factors))
+  Delta <- matrix(NA, nrow = dim.VAR^2 * lag.order, ncol = number.factors)
+  for (j in 1:number.factors) Delta[, j] <- as.vector(Phi_f_3D[, , j])
+  
+  Delta_r <- Delta[1:number.factors, , drop = FALSE]
+  is_lower_triangular <- all(Delta_r[upper.tri(Delta_r)] == 0)
+  positive_diag <- all(diag(Delta_r) > 0)
+  identified <- is_lower_triangular && positive_diag
+  
+  if (!identified) {
+    warning("Identification check failed: ensure Λ₀ is lower triangular with positive diagonal.")
+  }
+  return(identified)
+}
