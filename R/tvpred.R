@@ -173,7 +173,7 @@ predict.tvfit <- function(object,
     lb95  = t(lb95),
     ub95  = t(ub95),
     meta  = list(
-      N = N, h = h, B = B,
+      N = N, h = h, B = B, data = VAR.data,
       method = if (is_penalized) "tvpred_pen" else "tvpred",
       point  = point
     )
@@ -243,7 +243,6 @@ predict.tvfit <- function(object,
 #' @export
 plot.tvpred <- function(x,
                         var = NULL,
-                        hist_y = NULL,
                         hist_time = NULL,
                         hist_n = 50,
                         main = NULL,
@@ -264,6 +263,7 @@ plot.tvpred <- function(x,
   N <- x$meta$N
   h <- x$meta$h
   point_label <- x$meta$point %||% "mean"
+  hist_y <- x$meta$data
   
   # Get forecast components
   point <- as.matrix(x$point)
