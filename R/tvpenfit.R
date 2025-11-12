@@ -30,6 +30,14 @@ tvpenfit <- function(data,
   penalty_type <- match.arg(penalty_type)
   init         <- match.arg(init)
   
+  ## --- check id factor.structure ----
+  if (!is.null(factor.structure)) {
+    ok_id <- check_identification(factor.structure, dim.VAR = N,
+                                  number.factors = r, lag.order = p)
+    if (!ok_id) stop("The specified factor.structure is not identified. 
+                   Ensure Λ₀ is lower-triangular with positive diagonal.")
+  }
+  
   ## ---- data & dims ----
   Y <- as.matrix(data)
   if (!is.numeric(Y) || length(dim(Y)) != 2L)

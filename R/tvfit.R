@@ -162,11 +162,19 @@ tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
   method <- match.arg(method)
   init <- match.arg(init)
   
+  if (!is.null(factor.structure)) {
+    ok_id <- check_identification(factor.structure, dim.VAR = N,
+                                  number.factors = r, lag.order = p)
+    if (!ok_id) stop("The specified factor.structure is not identified. 
+                   Ensure Λ₀ is lower-triangular with positive diagonal.")
+  }
   
   if (is.null(factor.structure)) {
     factor.structure <- matrix(1, nrow = dim(data), ncol = dim(data))
     #TODO: Zero-mean = FALSE option
   }
+  
+  
   
   ss <- .tvvar_shared_setup(data, p, r, zero.mean, factor.structure)
   initvals <- .tvvar_build_par_init(ss$Y, p, r, zero.mean, ss$Phi.f.array, init, init_list)
