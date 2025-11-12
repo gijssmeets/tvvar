@@ -10,7 +10,7 @@
 #' @param zero.mean Logical; if TRUE, intercepts fixed at 0
 #' @param lambda_penalty Numeric scalar; L1 penalty level for Phi.f
 #' @param penalty_type "adaptive" or "regular"
-#' @param Phi.f.structure Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)
+#' @param factor.structure Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)
 #' @param init "default", "random", or "custom"
 #' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
@@ -23,7 +23,7 @@ tvpenfit <- function(data,
                      zero.mean = TRUE,
                      lambda_penalty = 0.01,
                      penalty_type = c("adaptive", "regular"),
-                     Phi.f.structure = NULL,
+                     factor.structure = NULL,
                      init = c("default", "random", "custom"),
                      init_list = NULL) {
   start_time   <- Sys.time()
@@ -38,7 +38,7 @@ tvpenfit <- function(data,
   
   ## ---- structure setup (aligned with unpen ML/EM) ----
   # default structure: all ones per factor if nothing provided
-  base_struct <- if (is.null(Phi.f.structure)) matrix(1, N, N) else Phi.f.structure
+  base_struct <- if (is.null(factor.structure)) matrix(1, N, N) else factor.structure
   phi_arr <- .normalize_phi_structure(base_struct, N = N, r = r)
   Phi.f.array <- make.Phi.f(structure = phi_arr, lag.order = p)
   
@@ -75,7 +75,7 @@ tvpenfit <- function(data,
   if (identical(penalty_type, "adaptive")) {
     fit_ml <- tvfit(
       data = Y, p = p, r = r, zero.mean = zero.mean,
-      phi_f_structure = matrix(1, nrow = N, ncol = N),
+      factor.structure = matrix(1, nrow = N, ncol = N),
       method = "ML", init = "default"
     )
     # extract ML Phi.f on the free pattern

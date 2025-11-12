@@ -2,10 +2,10 @@
 `%||%` <- function(x, y) if (!is.null(x)) x else y
 
 # ---- shared setup ----
-.tvvar_shared_setup <- function(data, p, r, zero.mean, phi_f_structure) {
+.tvvar_shared_setup <- function(data, p, r, zero.mean, factor.structure) {
   Y <- as.matrix(data)
   N <- ncol(Y); T.fin <- nrow(Y)
-  phi_arr      <- .normalize_phi_structure(phi_f_structure, N, r)
+  phi_arr      <- .normalize_phi_structure(factor.structure, N, r)
   Phi.f.array <- make.Phi.f(structure = phi_arr, lag.order = p)
   cfg <- list(dim.VAR = N, lag.order = p, number.factors = r, zero.mean = isTRUE(zero.mean))
   list(Y = Y, N = N, T.fin = T.fin, Phi.f.array = Phi.f.array, cfg = cfg)
@@ -91,7 +91,7 @@
 #' @param p Integer VAR lag order.
 #' @param r Integer number of latent factors (state dimension).
 #' @param zero.mean Logical; if \code{TRUE}, intercepts in \eqn{\Phi^c} are fixed at 0.
-#' @param phi_f_structure Free pattern for \eqn{\Phi^f}. One of:
+#' @param factor.structure Free pattern for \eqn{\Phi^f}. One of:
 #'   \itemize{
 #'     \item 3D array \code{[N, N, r]} (one \eqn{N \times N} slice per factor),
 #'     \item list of \code{r} \code{N x N} matrices,
@@ -140,25 +140,25 @@
 #' # ML with default init
 #' fit_ml <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-#'   phi_f_structure = matrix(1, 2, 2), method = "ML"
+#'   factor.structure = matrix(1, 2, 2), method = "ML"
 #' )
 #'
 #' # EM with random init
 #' fit_em <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-#'   phi_f_structure = matrix(1, 2, 2), method = "EM",
+#'   factor.structure = matrix(1, 2, 2), method = "EM",
 #'   init = "random"
 #' )
 #'
 #' # ML with custom init for A and B only (others fall back to defaults)
 #' fit_ml_custom <- tvfit(
 #'   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-#'   phi_f_structure = matrix(1, 2, 2), method = "ML",
+#'   factor.structure = matrix(1, 2, 2), method = "ML",
 #'   init = "custom", init_list = list(A = 0.2, B = 0.7)
 #' )
 #' }
 tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
-                  phi_f_structure = NULL,
+                  factor.structure = NULL,
                   method = c("ML","EM"),
                   control = list(maxit = 2000, trace = 0),
                   em_control = list(max_iter = 200, tol = 1e-3, trace = TRUE),
@@ -168,12 +168,12 @@ tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
   init <- match.arg(init)
   
   
-  if (is.null(phi_f_structure)) {
-    phi_f_structure <- matrix(1, nrow = dim(data), ncol = dim(data))
+  if (is.null(factor.structure)) {
+    factor.structure <- matrix(1, nrow = dim(data), ncol = dim(data))
     #TODO: Zero-mean = FALSE option
   }
   
-  ss <- .tvvar_shared_setup(data, p, r, zero.mean, phi_f_structure)
+  ss <- .tvvar_shared_setup(data, p, r, zero.mean, factor.structure)
   initvals <- .tvvar_build_par_init(ss$Y, p, r, zero.mean, ss$Phi.f.array, init, init_list)
   
   start_time <- Sys.time()
