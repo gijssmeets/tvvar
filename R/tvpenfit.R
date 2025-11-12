@@ -10,11 +10,32 @@
 #' @param zero.mean Logical; if TRUE, intercepts fixed at 0
 #' @param lambda_penalty Numeric scalar; L1 penalty level for Phi.f
 #' @param penalty_type "adaptive" or "regular"
-#' @param factor.structure Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)
+#' @param factor.structure Structure specification for Φᶠ (factor loading matrix).
+#'
+#'   Defines how factor loadings enter the time-varying component of the model.
+#'   The structure must satisfy identification restrictions:
+#'   \itemize{
+#'     \item The upper-triangular part of the first r×r block (Λ₀) must be zero.
+#'     \item The diagonal entries of Λ₀ must be strictly positive.
+#'   }
+#'
+#'   By default, \code{tvpenfit()} internally constructs such a structure
+#'   using \code{\link{make_Phi_f_structure}()}, but the user may provide a
+#'   custom one (for example, to impose specific sparsity or factor loadings).
+#'
+#'   The function automatically calls \code{\link{check_identification}()} to verify
+#'   the validity of any user-supplied structure.
+#'
+#' @details
+#' Identification follows Theorem 2.1 in Gorgi et al. (2024).
+#' If the supplied \code{factor.structure} violates identification restrictions,
+#' the function will terminate with an informative error.
+#'
+#' @seealso \code{\link{tvfit}} for the unpenalized variant.
 #' @param init "default", "random", or "custom"
 #' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
-#' @return Object of class `tvfit`, same structure as from `tvfit()`
+#' @return Object of class `tvfit`.
 #' @seealso [tvfit()], [tvirf()], [tvpred()]
 #' @export
 tvpenfit <- function(data,
