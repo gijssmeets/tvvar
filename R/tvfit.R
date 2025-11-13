@@ -91,8 +91,44 @@
 #' @param p Integer VAR lag order.
 #' @param r Integer number of latent factors (state dimension).
 #' @param zero.mean Logical; if \code{TRUE}, intercepts in \eqn{\Phi^c} are fixed at 0.
-#' @param factor_structure Specification of the factor loading structure Φᶠ.
-#'   See \code{\link{tvpenfit}} for details on accepted forms and identification restrictions.
+#' @param factor.structure Structure specification for Φᶠ (the factor loading component).
+#'
+#'   Defines which autoregressive coefficients vary with each latent factor.
+#'   Each element of \code{factor.structure} indicates whether a coefficient is
+#'   estimated (\code{1}) or restricted to zero (\code{0}). The user can supply:
+#'   \itemize{
+#'     \item a single matrix of dimension N×N (applied to all factors), or
+#'     \item a list/array of r such matrices, one per factor.
+#'   }
+#'
+#'   By default, all parameters are estimated (i.e., a full matrix of ones).
+#'   This corresponds to an unrestricted specification where all loadings are
+#'   free, subject to the identification rule below.
+#'
+#'   The identification condition requires that the first r×r block of the
+#'   corresponding factor-loading matrix (Λ₀) can be permuted into a
+#'   lower-triangular form with strictly positive diagonal elements.
+#'   Internally, \code{tvfit()} checks whether such a permutation exists.
+#'   If not, the function terminates with an informative error.
+#'
+#'   Users can also call \code{\link{init.factor.structure}()} to generate a
+#'   minimally identified default structure that automatically satisfies
+#'   these restrictions.
+#'
+#' @details
+#'   Identification follows the standard dynamic factor model convention:
+#'   factors are ordered and scaled such that Λ₀ is lower-triangular with
+#'   positive diagonal elements. This ensures uniqueness of the factor space
+#'   up to labeling.
+#'
+#'   Users may impose additional zeros on the factor structure to restrict
+#'   certain loadings, provided the identification condition still holds.
+#'   The internal \code{check_identification()} function verifies this
+#'   automatically when \code{tvfit()} runs.
+#'
+#' @seealso
+#'   \code{\link{tvpenfit}} for the penalized version, where the user must
+#'   manually ensure identification by ordering the factors appropriately.
 #' @param method One of \code{"ML"} (direct BFGS on likelihood) or \code{"EM"}.
 #' @param control List of optimizer controls passed to ML (e.g. \code{list(maxit=2000, trace=0)}).
 #' @param em_control List of EM controls
@@ -163,10 +199,9 @@ tvfit <- function(data, p = 1, r = 1, zero.mean = TRUE,
   init <- match.arg(init)
   
   if (!is.null(factor.structure)) {
-    ok_id <- check_identification(factor.structure, dim.VAR = N,
-                                  number.factors = r, lag.order = p)
-    if (!ok_id) stop("The specified factor.structure is not identified. 
-                   Ensure Λ₀ is lower-triangular with positive diagonal.")
+    if (!check_identification(factor.structure, dim(data), r, p)) {
+      stop("Identification failed: please adjust `factor.structure` (see ?tvfit).")
+    }
   }
   
   if (is.null(factor.structure)) {

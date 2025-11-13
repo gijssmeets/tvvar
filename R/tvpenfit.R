@@ -10,27 +10,46 @@
 #' @param zero.mean Logical; if TRUE, intercepts fixed at 0
 #' @param lambda_penalty Numeric scalar; L1 penalty level for Phi.f
 #' @param penalty_type "adaptive" or "regular"
-#' @param factor.structure Structure specification for Φᶠ (factor loading matrix).
+#' @param factor.structure Structure specification for Φᶠ (the factor loading component).
 #'
-#'   Defines how factor loadings enter the time-varying component of the model.
-#'   The structure must satisfy identification restrictions:
+#'   Defines which autoregressive coefficients are allowed to vary with each
+#'   latent factor and which are fixed to zero. Each entry of
+#'   \code{factor.structure} indicates whether a coefficient is estimated (\code{1})
+#'   or fixed to zero (\code{0}). The input can be:
 #'   \itemize{
-#'     \item The upper-triangular part of the first r×r block (Λ₀) must be zero.
-#'     \item The diagonal entries of Λ₀ must be strictly positive.
+#'     \item a single matrix of dimension N×N (applied to all factors), or
+#'     \item a list or 3D array of r matrices, one per factor.
 #'   }
 #'
-#'   By default, \code{tvpenfit()} internally constructs such a structure
-#'   using \code{\link{make_Phi_f_structure}()}, but the user may provide a
-#'   custom one (for example, to impose specific sparsity or factor loadings).
+#'   All coefficients corresponding to entries equal to \code{1} are *eligible*
+#'   for penalization, depending on the chosen penalty type and strength.
+#'   Coefficients fixed to \code{0} are excluded from estimation entirely.
 #'
-#'   The function automatically verifies the validity of any user-supplied structure.
+#'   The factors must be ordered such that the identification condition holds:
+#'   the first r×r block of the factor-loading matrix (Λ₀) is lower-triangular
+#'   with strictly positive diagonal elements. These diagonal elements are
+#'   internally forced to remain nonzero and *not penalized* to ensure identification.
+#'
+#'   In practice, this means that the first variable primarily loads on the first
+#'   factor, the second on the second factor, and so on. If the user provides a
+#'   custom factor structure, they should ensure this ordering and nonzero
+#'   diagonal pattern before estimation.
+#'
+#'   If no structure is provided, \code{tvpenfit()} uses the default
+#'   \code{\link{init.factor.structure}()} pattern, which satisfies these
+#'   identification requirements.
 #'
 #' @details
-#' Identification follows Theorem 2.1 in Gorgi et al. (2024).
-#' If the supplied \code{factor.structure} violates identification restrictions,
-#' the function will terminate with an informative error.
+#'   In the penalized model, identification is maintained by fixing the diagonal
+#'   of Λ₀ as nonzero and unpenalized, while all remaining free coefficients
+#'   (entries equal to 1 in \code{factor.structure}) can be subject to L1 or
+#'   adaptive L1 regularization. The user must ensure factor ordering consistent
+#'   with this restriction.
 #'
-#' @seealso \code{\link{tvfit}} for the unpenalized variant.
+#' @seealso
+#'   \code{\link{tvfit}} for the unpenalized version, which automatically checks
+#'   whether a valid lower-triangular identification can be achieved up to
+#'   permutation.
 #' @param init "default", "random", or "custom"
 #' @param init_list Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)
 #'
