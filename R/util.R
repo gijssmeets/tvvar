@@ -796,22 +796,64 @@ optim_pphi_bfgs <- function(opti.eval.em, cfg) {
   }
 }
 
+
 #' @keywords internal
 #' @noRd
-check_identification <- function(Phi.f, dim.VAR, number.factors, lag.order) {
-  Phi_f_3D <- array(Phi.f, dim = c(dim.VAR, dim.VAR * lag.order, number.factors))
-  Delta <- matrix(NA, nrow = dim.VAR^2 * lag.order, ncol = number.factors)
-  for (j in 1:number.factors) Delta[, j] <- as.vector(Phi_f_3D[, , j])
+check_identification <- function(factor.structure, dim.VAR, number.factors, lag.order) {
+  N <- dim.VAR
+  r <- number.factors
+  p <- lag.order
   
-  Delta_r <- Delta[1:number.factors, , drop = FALSE]
-  is_lower_triangular <- all(Delta_r[upper.tri(Delta_r)] == 0)
-  positive_diag <- all(diag(Delta_r) > 0)
-  identified <- is_lower_triangular && positive_diag
-  
-  if (!identified) {
-    warning("Identification check failed: ensure Λ₀ is lower triangular with positive diagonal.")
+  # --- Step 1: Convert to 3D array form [N x (N*p) x r] ---
+  if (length(dim(factor.structure)) == 2L) {
+    # e.g., a flattened N x (N*p*r) matrix
+    if (ncol(factor.structure) != N * p * r)
+      stop("If 2D, factor.structure must have N * (N*p*r) columns.")
+    factor.structure <- array(factor.structure, dim = c(N, N * p, r))
+  } else if (length(dim(factor.structure)) != 3L) {
+    stop("`factor.structure` must be either a 3D array [N x (N*p) x r] or equivalent 2D form.")
   }
-  return(identified)
+  
+  # --- Step 2: Build Λ = [vec(Phi_1^f), ..., vec(Phi_r^f)] ---
+  Lambda <- matrix(NA, nrow = N * N * p, ncol = r)
+  for (j in seq_len(r)) {
+    Lambda[, j] <- as.vector(factor.structure[, , j])
+  }
+  
+  # --- Step 3: Extract the identification block Λ₀ (first r rows) ---
+  Lambda_0 <- Lambda[1:r, , drop = FALSE]
+  
+  # --- Step 4: Check identification condition up to permutation ---
+  perms <- gtools::permutations(r, r)
+  identified <- FALSE
+  successful_perm <- NULL
+  
+  for (i in seq_len(nrow(perms))) {
+    permuted <- Lambda_0[, perms[i, ]]
+    
+    # Must be lower triangular (zeros strictly above diag)
+    lower_ok <- all(permuted[upper.tri(permuted)] == 0)
+    
+    # Diagonal must be strictly positive
+    diag_ok <- all(diag(permuted) > 0)
+    
+    if (lower_ok && diag_ok) {
+      identified <- TRUE
+      successful_perm <- perms[i, ]
+      break
+    }
+  }
+  
+  # --- Step 5: Output and messages ---
+  if (identified) {
+    message("✅ Identification check passed: Λ₀ can be permuted into lower-triangular form ",
+            "(permutation: ", paste(successful_perm, collapse = ","), ").")
+    return(TRUE)
+  } else {
+    warning("The supplied factor.structure cannot be permuted into an identifiable form.\n",
+            "Ensure there are enough zeros to construct a lower-triangular Λ₀ with positive diagonal.")
+    return(FALSE)
+  }
 }
 
 #' @keywords internal
