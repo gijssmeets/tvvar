@@ -11,7 +11,7 @@ tvpenfit(
   zero.mean = TRUE,
   lambda_penalty = 0.01,
   penalty_type = c("adaptive", "regular"),
-  Phi.f.structure = NULL,
+  factor.structure = NULL,
   init = c("default", "random", "custom"),
   init_list = NULL
 )
@@ -29,20 +29,58 @@ tvpenfit(
 
 \item{penalty_type}{"adaptive" or "regular"}
 
-\item{Phi.f.structure}{Optional free-pattern for Phi^f (3D matrix with dimensions N x N x r), list of r N x N, or N x (N*r) matrix)}
+\item{factor.structure}{Structure specification for Φᶠ (the factor loading component).
+
+Defines which autoregressive coefficients are allowed to vary with each
+latent factor and which are fixed to zero. Each entry of
+\code{factor.structure} indicates whether a coefficient is estimated (\code{1})
+or fixed to zero (\code{0}). The input can be:
+\itemize{
+\item a single matrix of dimension N×N (applied to all factors), or
+\item a list or 3D array of r matrices, one per factor.
+}
+
+All coefficients corresponding to entries equal to \code{1} are \emph{eligible}
+for penalization, depending on the chosen penalty type and strength.
+Coefficients fixed to \code{0} are excluded from estimation entirely.
+
+The factors must be ordered such that the identification condition holds:
+the first r×r block of the factor-loading matrix (Λ₀) is lower-triangular
+with strictly positive diagonal elements. These diagonal elements are
+internally forced to remain nonzero and \emph{not penalized} to ensure identification.
+
+In practice, this means that the first variable primarily loads on the first
+factor, the second on the second factor, and so on. If the user provides a
+custom factor structure, they should ensure this ordering and nonzero
+diagonal pattern before estimation.
+
+If no structure is provided, \code{tvpenfit()} uses the default
+\code{\link{init.factor.structure}()} pattern, which satisfies these
+identification requirements.}
 
 \item{init}{"default", "random", or "custom"}
 
 \item{init_list}{Named list for custom init (A, B, phi_r, Omega, Phi_c, Phi_f)}
 }
 \value{
-Object of class \code{tvfit}, same structure as from \code{tvfit()}
+Object of class \code{tvfit}.
 }
 \description{
 Fits a penalized time-varying VAR (TV-VAR) model using the ECM algorithm.
 Optionally uses adaptive weights for shrinkage. The estimated object can be
 passed to functions such as \code{tvirf()} and \code{tvpred()} for IRFs and forecasting.
 }
+\details{
+In the penalized model, identification is maintained by fixing the diagonal
+of Λ₀ as nonzero and unpenalized, while all remaining free coefficients
+(entries equal to 1 in \code{factor.structure}) can be subject to L1 or
+adaptive L1 regularization. The user must ensure factor ordering consistent
+with this restriction.
+}
 \seealso{
+\code{\link{tvfit}} for the unpenalized version, which automatically checks
+whether a valid lower-triangular identification can be achieved up to
+permutation.
+
 \code{\link[=tvfit]{tvfit()}}, \code{\link[=tvirf]{tvirf()}}, \code{\link[=tvpred]{tvpred()}}
 }

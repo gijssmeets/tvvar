@@ -9,7 +9,7 @@ tvfit(
   p = 1,
   r = 1,
   zero.mean = TRUE,
-  phi_f_structure = NULL,
+  factor.structure = NULL,
   method = c("ML", "EM"),
   control = list(maxit = 2000, trace = 0),
   em_control = list(max_iter = 200, tol = 0.001, trace = TRUE),
@@ -26,13 +26,29 @@ tvfit(
 
 \item{zero.mean}{Logical; if \code{TRUE}, intercepts in \eqn{\Phi^c} are fixed at 0.}
 
-\item{phi_f_structure}{Free pattern for \eqn{\Phi^f}. One of:
+\item{factor.structure}{Structure specification for Φᶠ (the factor loading component).
+
+Defines which autoregressive coefficients vary with each latent factor.
+Each element of \code{factor.structure} indicates whether a coefficient is
+estimated (\code{1}) or restricted to zero (\code{0}). The user can supply:
 \itemize{
-\item 3D array \code{[N, N, r]} (one \eqn{N \times N} slice per factor),
-\item list of \code{r} \code{N x N} matrices,
-\item block matrix \code{N x (N*r)} (concatenated by columns).
+\item a single matrix of dimension N×N (applied to all factors), or
+\item a list/array of r such matrices, one per factor.
 }
-Use ones for “free”, zeros for “fixed at 0”.}
+
+By default, all parameters are estimated (i.e., a full matrix of ones).
+This corresponds to an unrestricted specification where all loadings are
+free, subject to the identification rule below.
+
+The identification condition requires that the first r×r block of the
+corresponding factor-loading matrix (Λ₀) can be permuted into a
+lower-triangular form with strictly positive diagonal elements.
+Internally, \code{tvfit()} checks whether such a permutation exists.
+If not, the function terminates with an informative error.
+
+Users can also call \code{\link{init.factor.structure}()} to generate a
+minimally identified default structure that automatically satisfies
+these restrictions.}
 
 \item{method}{One of \code{"ML"} (direct BFGS on likelihood) or \code{"EM"}.}
 
@@ -58,6 +74,16 @@ or an EM routine, without sparsity penalties. Produces an object compatible
 with downstream functions such as \code{\link[=tvirf]{tvirf()}} and \code{\link[=tvpred]{tvpred()}}.
 }
 \details{
+Identification follows the standard dynamic factor model convention:
+factors are ordered and scaled such that Λ₀ is lower-triangular with
+positive diagonal elements. This ensures uniqueness of the factor space
+up to labeling.
+
+Users may impose additional zeros on the factor structure to restrict
+certain loadings, provided the identification condition still holds.
+The internal \code{check_identification()} function verifies this
+automatically when \code{tvfit()} runs.
+
 Initialization:
 \itemize{
 \item \strong{default}: \eqn{A=0.10}, \eqn{B=0.80}, \eqn{\phi_r=0.95}, \eqn{\Omega} with
@@ -84,24 +110,27 @@ The returned object has class \code{"tvfit"} and contains:
 # ML with default init
 fit_ml <- tvfit(
   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-  phi_f_structure = matrix(1, 2, 2), method = "ML"
+  factor.structure = matrix(1, 2, 2), method = "ML"
 )
 
 # EM with random init
 fit_em <- tvfit(
   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-  phi_f_structure = matrix(1, 2, 2), method = "EM",
+  factor.structure = matrix(1, 2, 2), method = "EM",
   init = "random"
 )
 
 # ML with custom init for A and B only (others fall back to defaults)
 fit_ml_custom <- tvfit(
   data = simdata$Y, p = 1, r = 1, zero.mean = TRUE,
-  phi_f_structure = matrix(1, 2, 2), method = "ML",
+  factor.structure = matrix(1, 2, 2), method = "ML",
   init = "custom", init_list = list(A = 0.2, B = 0.7)
 )
 }
 }
 \seealso{
+\code{\link{tvpenfit}} for the penalized version, where the user must
+manually ensure identification by ordering the factors appropriately.
+
 \code{\link[=tvpenfit]{tvpenfit()}}, \code{\link[=tvirf]{tvirf()}}, \code{\link[=tvpred]{tvpred()}}
 }

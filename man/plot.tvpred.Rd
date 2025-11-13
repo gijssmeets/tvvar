@@ -7,7 +7,6 @@
 \method{plot}{tvpred}(
   x,
   var = NULL,
-  hist_y = NULL,
   hist_time = NULL,
   hist_n = 50,
   main = NULL,
@@ -25,8 +24,6 @@
 \item{x}{A \code{tvpred} object returned by \code{predict.tvfit()}.}
 
 \item{var}{Integer vector of variables to plot (1..N). Default = all.}
-
-\item{hist_y}{Optional historical data (T×N matrix or vector) corresponding to the fitted sample.}
 
 \item{hist_time}{Optional vector giving time indices or dates for the x-axis.
 Acceptable formats include a \code{Date} vector
@@ -54,6 +51,8 @@ and extends by \code{h} additional periods using the same spacing.}
 \item{vline_lty}{Linetype for the vertical line (default = 2, dotted).}
 
 \item{...}{Additional graphical arguments passed to lower-level plotting functions.}
+
+\item{hist_y}{Optional historical data (T×N matrix or vector) corresponding to the fitted sample.}
 }
 \description{
 Visualizes forecasts produced by \code{predict.tvfit()}, showing both 68\\% and 95\\%
