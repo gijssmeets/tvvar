@@ -807,7 +807,7 @@ check_identification <- function(factor.structure, dim.VAR, number.factors, lag.
   # --- Step 1: Convert to 3D array form [N x (N*p) x r] ---
   if (length(dim(factor.structure)) == 2L) {
     # e.g., a flattened N x (N*p*r) matrix
-    if (ncol(factor.structure) != N * p * r)
+    if (ncol(factor.structure) != (N * p * r))
       stop("If 2D, factor.structure must have N * (N*p*r) columns.")
     factor.structure <- array(factor.structure, dim = c(N, N * p, r))
   } else if (length(dim(factor.structure)) != 3L) {
