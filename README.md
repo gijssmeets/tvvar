@@ -1,3 +1,5 @@
+# This research was funded by the Dutch Research Council (NWO), project "Statistical Learning Over Time", grant VI.Vidi.191.169.
+
 # examplepkg
 
 A tiny example R package set up for CRAN submission workflow.
